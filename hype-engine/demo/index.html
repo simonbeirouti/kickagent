@@ -30,17 +30,53 @@
   button:hover { border-color: var(--green); }
   button.primary { background: var(--green); color: #08210a; font-weight: 700; border-color: var(--green); }
 
-  main { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 1rem; padding: 1rem; min-height: 0; }
+  main { flex: 1; display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; padding: 1rem; min-height: 0; }
   .col { display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
   .card h2 { font-size: 0.75rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--green); margin-bottom: 0.8rem; }
 
-  /* Hype meter */
+  /* Hype meter — vertical bar beside the readout */
+  .hype-body { display: flex; align-items: flex-end; gap: 1.4rem; margin-top: 0.4rem; }
   #hypeNum { font-size: 4.6rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
   #hypeNum small { font-size: 1.4rem; color: var(--muted); font-weight: 600; }
   #trend { font-size: 1rem; margin-left: 0.6rem; }
-  .meter { height: 22px; background: #0a0f09; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; margin-top: 0.9rem; }
-  .meter > div { height: 100%; width: 0%; background: linear-gradient(90deg, #1f7a12, var(--green)); border-radius: 11px; transition: none; }
+  .hype-readout { flex: 1; min-width: 0; }
+  .meter {
+    position: relative; width: 52px; height: 230px; flex-shrink: 0;
+    background: #0a0f09; border: 1px solid var(--border); border-radius: 26px; overflow: hidden;
+  }
+  .meter > div {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+    background: linear-gradient(0deg, #1f7a12, var(--green)); border-radius: 26px; transition: none;
+  }
+
+  /* Past 90: the fill pulses to say "almost maxed". */
+  @keyframes meterFlash {
+    0%, 100% { filter: brightness(1); box-shadow: 0 0 0 rgba(255,176,32,0); }
+    50% { filter: brightness(1.5); box-shadow: 0 0 18px 3px rgba(255,176,32,.85); }
+  }
+  .meter.flash > div { animation: meterFlash 0.5s ease-in-out infinite; }
+
+  /* At 100: the whole bar goes off. */
+  @keyframes meterCrazyBg {
+    0% { background: linear-gradient(0deg, #ff4d4d, #ffb020); }
+    33% { background: linear-gradient(0deg, #ffb020, var(--green)); }
+    66% { background: linear-gradient(0deg, var(--green), #4dd2ff); }
+    100% { background: linear-gradient(0deg, #4dd2ff, #ff4d4d); }
+  }
+  @keyframes meterCrazyGlow {
+    0%, 100% { filter: brightness(1.2); box-shadow: 0 0 10px 2px rgba(255,255,255,.5); }
+    50% { filter: brightness(1.8); box-shadow: 0 0 30px 8px rgba(255,255,255,.9); }
+  }
+  @keyframes meterCrazyShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+  }
+  .meter.crazy { animation: meterCrazyShake 0.12s linear infinite; }
+  .meter.crazy > div { animation: meterCrazyBg 0.7s linear infinite, meterCrazyGlow 0.25s ease-in-out infinite; }
   .meta { display: flex; gap: 1.4rem; margin-top: 0.7rem; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
   #readyBadge {
     display: inline-block; margin-top: 0.8rem; padding: 0.3rem 0.7rem; border-radius: 7px;
@@ -59,11 +95,6 @@
 
   /* Feeds */
   .feed { flex: 1; overflow-y: auto; min-height: 0; }
-  .msg { font-size: 0.85rem; padding: 0.22rem 0; color: var(--muted); }
-  .msg b { color: var(--text); font-weight: 600; }
-  .msg.kicks b, .msg.kicks { color: var(--amber); }
-  .msg.sub b, .msg.sub { color: var(--green); }
-  .msg.spam { color: var(--red); text-decoration: line-through; opacity: 0.6; }
 
   .toast { border: 1px solid var(--green); background: rgba(83,252,24,.07); border-radius: 10px; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; font-size: 0.9rem; }
   .toast .when { color: var(--muted); font-size: 0.72rem; margin-top: 0.25rem; }
@@ -118,14 +149,18 @@
   <div class="col">
     <div class="card">
       <h2>Hype Score · streamer-only</h2>
-      <div><span id="hypeNum">0<small>/100</small></span><span id="trend"></span></div>
-      <div class="meter"><div id="meterFill"></div></div>
-      <div class="meta">
-        <span>raw <b id="rawV">0</b></span>
-        <span>baseline <b id="baseV">0</b></span>
-        <span>z <b id="zV">0</b></span>
+      <div class="hype-body">
+        <div class="meter" id="meterBar"><div id="meterFill"></div></div>
+        <div class="hype-readout">
+          <div><span id="hypeNum">0<small>/100</small></span><span id="trend"></span></div>
+          <div class="meta">
+            <span>raw <b id="rawV">0</b></span>
+            <span>baseline <b id="baseV">0</b></span>
+            <span>z <b id="zV">0</b></span>
+          </div>
+          <div id="readyBadge">CALIBRATING BASELINE…</div>
+        </div>
       </div>
-      <div id="readyBadge">CALIBRATING BASELINE…</div>
     </div>
     <div class="card" style="flex:1; min-height:0;">
       <h2>Hot Topics · what chat cares about</h2>
@@ -195,7 +230,7 @@ function boot() {
   highlights = new HighlightTracker({ topics });
   events = LIVE ? [] : createScriptedReplay();
   ei = 0; simNow = 0; displayHype = 0; targetState = null; lastSampleAt = -1000;
-  $('chat').innerHTML = ''; $('assist').innerHTML = '';
+  $('assist').innerHTML = '';
   $('highlights').innerHTML = '<div class="empty">No highlights yet — they capture automatically when hype spikes.</div>';
   $('readyBadge').className = ''; $('readyBadge').textContent = 'CALIBRATING BASELINE…';
 
@@ -305,18 +340,6 @@ function addHighlight(h) {
   feed.scrollTop = feed.scrollHeight;
 }
 
-function renderChatLine(ev, flagged) {
-  const el = document.createElement('div');
-  const text = (ev.text || '').replace(/\[emote:\d+:([^\]]+)\]/g, ':$1:');
-  if (ev.type === 'kicks') { el.className = 'msg kicks'; el.innerHTML = `<b>${ev.username}</b> gifted ${ev.raw} Kicks`; }
-  else if (ev.type === 'sub') { el.className = 'msg sub'; el.innerHTML = `<b>${ev.username}</b> subscribed`; }
-  else { el.className = flagged ? 'msg spam' : 'msg'; el.innerHTML = `<b>${ev.username}</b> ${text}`; }
-  const feed = $('chat');
-  feed.appendChild(el);
-  while (feed.children.length > 120) feed.firstChild.remove();
-  feed.scrollTop = feed.scrollHeight;
-}
-
 function step(dtMs) {
   if (LIVE) {
     // Live events ingest on SSE arrival; the loop only advances the shared
@@ -366,11 +389,13 @@ function render() {
     displayHype += (targetState.hype - displayHype) * 0.08;
     const h = Math.round(displayHype);
     $('hypeNum').innerHTML = `${h}<small>/100</small>`;
-    $('meterFill').style.width = `${h}%`;
+    $('meterFill').style.height = `${h}%`;
     $('meterFill').style.background = h > 66
-      ? 'linear-gradient(90deg,#1f7a12,var(--green))'
-      : h > 33 ? 'linear-gradient(90deg,#7a6a12,var(--amber))'
-      : 'linear-gradient(90deg,#5a1f1f,#c05050)';
+      ? 'linear-gradient(0deg,#1f7a12,var(--green))'
+      : h > 33 ? 'linear-gradient(0deg,#7a6a12,var(--amber))'
+      : 'linear-gradient(0deg,#5a1f1f,#c05050)';
+    $('meterBar').classList.toggle('flash', h >= 90 && h < 100);
+    $('meterBar').classList.toggle('crazy', h >= 100);
     $('trend').textContent = { rising: '▲ rising', steady: '▶ steady', falling: '▼ falling' }[targetState.trend];
     $('trend').style.color = targetState.trend === 'rising' ? 'var(--green)' : targetState.trend === 'falling' ? 'var(--red)' : 'var(--muted)';
     $('rawV').textContent = targetState.raw.toFixed(1);
