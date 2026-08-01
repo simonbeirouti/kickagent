@@ -2269,9 +2269,11 @@ body:has(.glasses-hud) {
 .canvas-widget.widget-suggestion,
 .canvas-widget.widget-chat {
   overflow: visible;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
+  border: 0;
+  border-radius: 0;
+  outline: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
 }
 
 .canvas-widget.editable {
@@ -2384,13 +2386,6 @@ body:has(.glasses-hud) {
 
 .canvas-widget .chat-message:last-child {
   border-bottom: 1px solid rgb(255 255 255 / 10%);
-}
-
-.canvas-widget .empty-messages {
-  min-height: 100%;
-  border: 1px dashed rgb(255 255 255 / 12%);
-  border-radius: 0.7rem;
-  font-size: clamp(0.4rem, 2.8cqw, 0.8rem);
 }
 
 .canvas-widget .hype-content {

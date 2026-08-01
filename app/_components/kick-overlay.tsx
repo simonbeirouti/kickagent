@@ -13,7 +13,6 @@ import {
   LogOutIcon,
   MessageCircleIcon,
   MonitorUpIcon,
-  RadioIcon,
   SkullIcon,
   SmartphoneIcon,
   SmilePlusIcon,
@@ -427,7 +426,6 @@ function OverlayCanvas({
             />
           ) : null}
           <WidgetContent
-            editable={!publicMode}
             kind={placement.kind}
             state={state}
           />
@@ -444,11 +442,9 @@ function OverlayCanvas({
 }
 
 function WidgetContent({
-  editable,
   kind,
   state,
 }: {
-  readonly editable: boolean;
   readonly kind: WidgetKind;
   readonly state: OverlayState;
 }) {
@@ -472,7 +468,7 @@ function WidgetContent({
   if (kind === "chat") {
     return (
       <div className="canvas-widget-inner chat-canvas-widget">
-        <RecentChatCards editable={editable} messages={state.messages} />
+        <RecentChatCards messages={state.messages} />
       </div>
     );
   }
@@ -581,10 +577,8 @@ function suggestionText(state: OverlayState): string {
 }
 
 function RecentChatCards({
-  editable,
   messages,
 }: {
-  readonly editable: boolean;
   readonly messages: OverlayState["messages"];
 }) {
   const [now, setNow] = useState<number>();
@@ -604,7 +598,7 @@ function RecentChatCards({
       });
 
   if (recentMessages.length === 0) {
-    return editable ? <div className="empty-messages"><RadioIcon size={20} /><span>Recent chats appear here</span></div> : null;
+    return null;
   }
 
   return (
