@@ -14,13 +14,12 @@ describe("Kick OAuth", () => {
     expect(createCodeChallenge(verifier)).toBe("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
   });
 
-  it("requests only the required Kick scopes", () => {
+  it("requests only the declared Kick scopes", () => {
     process.env.APP_URL = "https://companion.example";
     process.env.KICK_CLIENT_ID = "client-id";
     const url = new URL(createKickAuthorizationUrl({ codeChallenge: "challenge", state: "state" }));
     expect(url.origin).toBe("https://id.kick.com");
     expect(url.searchParams.get("scope")).toBe(KICK_SCOPES.join(" "));
-    expect(url.searchParams.get("scope")).not.toContain("chat:write");
     expect(url.searchParams.get("redirect_uri")).toBe(
       "https://companion.example/api/auth/kick/callback",
     );

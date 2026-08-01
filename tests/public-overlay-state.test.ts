@@ -40,8 +40,8 @@ describe("public overlay state", () => {
           sender_username: "viewer",
         },
       ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      // Remaining queries (analysis windows, hype lookback) return no rows.
+      .mockResolvedValue([]);
   });
 
   afterEach(() => {

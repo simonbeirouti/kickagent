@@ -650,7 +650,6 @@ function formatConnectionError(code: string): string {
     kick_connection_failed: "Kick could not be connected. Check the app and webhook settings.",
     oauth_state_invalid: "The Kick sign-in expired. Please try again.",
     oauth_state_missing: "The Kick sign-in could not be verified. Please try again.",
-    owner_already_connected: "A different Kick owner is already connected.",
   };
   return messages[code] ?? "Kick could not be connected.";
 }

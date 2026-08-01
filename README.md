@@ -51,7 +51,9 @@ Copy `.env.example` to `.env.local` and set:
 - `ANTHROPIC_API_KEY`: Anthropic API key used by both eve agents for direct model calls.
 - `KICK_PUBLIC_KEY`: optional override of Kick's published webhook verification key.
 
-The companion is pinned to its single Kick owner by numeric user ID in `lib/kick/access.ts`.
+Sign-in is open to any Kick account by default. Set `KICK_ALLOWED_USER_ID` (single numeric Kick
+user id or a comma-separated list; `*`/unset allows anyone) to restrict who can connect — see
+`lib/kick/access.ts`.
 
 Use the same variables in Vercel Production. Preview deployments should use a separate Kick app if
 their callback origin differs.
