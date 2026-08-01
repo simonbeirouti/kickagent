@@ -2165,6 +2165,12 @@ body:has(.glasses-hud) {
   color: #959e97;
 }
 
+.screen-picker-row > a[aria-disabled="true"] {
+  cursor: wait;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 .canvas-heading {
   display: flex;
   min-height: 3.5rem;

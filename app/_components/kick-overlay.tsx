@@ -23,7 +23,7 @@ import {
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { GlassesSurface } from "@/app/_components/companion-surfaces";
 import {
@@ -49,6 +49,7 @@ import {
   type WidgetKind,
   type WidgetPlacement,
 } from "@/lib/overlay-layout";
+import { usePersistedScreenLayouts } from "@/lib/overlay-layout-store";
 import type { OverlayState } from "@/lib/overlay-state";
 
 interface DragPayload {
@@ -101,10 +102,44 @@ export function KickOverlay({
   readonly publicMode?: boolean;
 }) {
   const liveState = useLiveOverlayState({ accessToken, publicMode });
+  const persistedLayouts = usePersistedScreenLayouts(
+    liveState.state?.channel.slug,
+    liveState.state
+      ? {
+          ...liveState.state.screenLayouts,
+          public: liveState.state.screenLayouts.public ?? liveState.state.layout,
+        }
+      : undefined,
+  );
   const [draftLayouts, setDraftLayouts] = useState<Partial<Record<ManagedScreen, OverlayLayout>>>({});
   const [disconnecting, setDisconnecting] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [publicOverlayUrl, setPublicOverlayUrl] = useState<string>();
+  const [publicUrlError, setPublicUrlError] = useState(false);
+  const [saveState, setSaveState] = useState<"error" | "idle" | "saving" | "saved">("idle");
   const [selectedScreen, setSelectedScreen] = useState<ManagedScreen>("public");
+  const publicLayout = persistedLayouts.layouts?.public
+    ?? liveState.state?.screenLayouts.public
+    ?? liveState.state?.layout;
+  const publicLayoutKey = publicLayout ? JSON.stringify(publicLayout) : "";
+
+  useEffect(() => {
+    if (!liveState.state?.channel.slug || !publicLayoutKey || publicMode) return;
+    let cancelled = false;
+    setPublicUrlError(false);
+    void requestPublicOverlayUrl(JSON.parse(publicLayoutKey) as OverlayLayout)
+      .then((url) => {
+        if (!cancelled) setPublicOverlayUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPublicOverlayUrl(undefined);
+          setPublicUrlError(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveState.state?.channel.slug, publicLayoutKey, publicMode]);
 
   if (liveState.authenticated === undefined) return <LoadingScreen />;
   if (!liveState.authenticated || !liveState.state) {
@@ -126,10 +161,12 @@ export function KickOverlay({
 
   const selectedScreenDetails = MANAGED_SCREENS.find((screen) => screen.id === selectedScreen)!;
   const activeLayout = draftLayouts[selectedScreen]
+    ?? persistedLayouts.layouts?.[selectedScreen]
     ?? state.screenLayouts[selectedScreen]
     ?? (selectedScreen === "public" ? state.layout : []);
   const saveActiveLayout = async (next: OverlayLayout) => {
     setDraftLayouts((current) => ({ ...current, [selectedScreen]: next }));
+    persistedLayouts.persistLayout(selectedScreen, next);
     setSaveState("saving");
     try {
       const response = await fetch("/api/overlay/layout", {
@@ -143,7 +180,7 @@ export function KickOverlay({
       setSaveState("saved");
       window.setTimeout(() => setSaveState("idle"), 1_500);
     } catch {
-      setSaveState("idle");
+      setSaveState("error");
     }
   };
   const disconnect = async () => {
@@ -198,7 +235,17 @@ export function KickOverlay({
                 ))}
               </nav>
             </div>
-            <a href={selectedScreenDetails.href} rel="noreferrer" target="_blank">Open live screen <ExternalLinkIcon size={14} /></a>
+            <a
+              aria-disabled={selectedScreen === "public" && !publicOverlayUrl}
+              href={selectedScreen === "public" ? publicOverlayUrl : selectedScreenDetails.href}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {selectedScreen === "public" && !publicOverlayUrl
+                ? publicUrlError ? "Public URL unavailable" : "Preparing public URL…"
+                : "Open live screen"}
+              <ExternalLinkIcon size={14} />
+            </a>
           </div>
           <div className="canvas-heading">
             <div><p className="eyebrow">Selected screen</p><h2>{selectedScreenDetails.label} · {selectedScreenDetails.dimensions}</h2></div>
@@ -224,7 +271,7 @@ function WidgetLibrary({
 }: {
   readonly layout: OverlayLayout;
   readonly saveLayout: (layout: OverlayLayout) => Promise<void>;
-  readonly saveState: "idle" | "saving" | "saved";
+  readonly saveState: "error" | "idle" | "saving" | "saved";
 }) {
   return (
     <aside className="widget-library">
@@ -263,7 +310,13 @@ function WidgetLibrary({
         ))}
       </div>
       <p className="save-indicator" aria-live="polite">
-        {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
+        {saveState === "saving"
+          ? "Saving layout…"
+          : saveState === "saved"
+            ? "Layout saved"
+            : saveState === "error"
+              ? "Layout could not be saved"
+              : "24 × 14 snap grid"}
       </p>
     </aside>
   );
@@ -540,6 +593,18 @@ function placementStyle(placement: WidgetPlacement): CSSProperties {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+async function requestPublicOverlayUrl(layout: OverlayLayout): Promise<string> {
+  const response = await fetch("/api/overlay/access", {
+    body: JSON.stringify({ layout }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("Could not create the public overlay URL.");
+  const result = await response.json() as { readonly url?: unknown };
+  if (typeof result.url !== "string") throw new Error("Invalid public overlay URL.");
+  return result.url;
 }
 
 function suggestionText(state: OverlayState): string {
