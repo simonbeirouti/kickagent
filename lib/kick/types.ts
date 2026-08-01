@@ -98,3 +98,39 @@ export const kickLivestreamMetadataEventSchema = z.object({
     title: z.string().nullable().optional(),
   }),
 });
+
+export const kickSendChatMessageResponseSchema = z.object({
+  data: z.object({
+    is_sent: z.boolean(),
+    message_id: z.string(),
+  }),
+  message: z.string().optional(),
+});
+
+export const streamAnalysisSchema = z.object({
+  basis: z.enum(["chat", "stream_context"]),
+  hypeScore: z.number().int().min(0).max(100),
+  summary: z.string().trim().min(1).max(280),
+  suggestion: z.string().trim().min(1).max(140),
+  topics: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(48),
+        percentage: z.number().int().min(0).max(100),
+      }),
+    )
+    .max(3),
+});
+
+export type StreamAnalysis = z.infer<typeof streamAnalysisSchema>;
+
+export const chatSummarySchema = z.object({
+  interest: z.enum(["low", "medium", "high"]),
+  purpose: z.string().trim().min(1).max(160),
+  requests: z.array(z.string().trim().min(1).max(120)).max(5),
+  summary: z.string().trim().min(1).max(280),
+  suggestions: z.array(z.string().trim().min(1).max(140)).min(1).max(3),
+  tone: z.string().trim().min(1).max(60),
+});
+
+export type ChatSummary = z.infer<typeof chatSummarySchema>;

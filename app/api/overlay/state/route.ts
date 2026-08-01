@@ -1,5 +1,6 @@
-import { query } from "@/lib/db";
 import { start } from "workflow/api";
+import { query } from "@/lib/db";
+import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
 import { getKickChannel } from "@/lib/kick/oauth";
 import {
   findConnectionById,
@@ -24,6 +25,10 @@ import { kickSuggestionWorkflow } from "@/workflows/kick-suggestions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// Same trailing lookback workflows/kick-suggestions.ts replays per tick: must
+// comfortably exceed HypeEngine's 45s warm-up so `ready` means a locked baseline.
+const HYPE_LOOKBACK_MS = 3 * 60_000;
 
 interface MessageRow extends Record<string, unknown> {
   readonly content: string;
@@ -70,6 +75,7 @@ export async function GET(request: Request): Promise<Response> {
     }
     return Response.json(
       {
+        activeBet: staticWidgets.activeBet,
         actionBet: staticWidgets.actionBet,
         authenticated: true,
         channel: {
@@ -80,7 +86,13 @@ export async function GET(request: Request): Promise<Response> {
           streamTitle: channel.streamTitle ?? null,
         },
         connected: true,
-        hypeScore: 0,
+        // Stateless mode is a profile/layout preview with no chat ingestion,
+        // so the hype engine has no input to replay. Ship a sample score so
+        // the layout canvas looks real; hypeReady=false + ingestionEnabled=
+        // false let the widget label it as preview data.
+        hypeReady: false,
+        hypeScore: 72,
+        hypeTrend: "steady",
         ingestionEnabled: false,
         live: channel.isLive,
         layout:
@@ -137,7 +149,8 @@ export async function GET(request: Request): Promise<Response> {
       console.error("Failed to refresh Kick channel state", error);
     }
   }
-  const [messageRows, completedRows, latestRows] = await Promise.all([
+  const asOf = Date.now();
+  const [messageRows, completedRows, latestRows, hypeRows] = await Promise.all([
     query<MessageRow>(
       `SELECT message_id, sender_username, content, created_at
        FROM chat_messages WHERE connection_id = $1
@@ -158,7 +171,15 @@ export async function GET(request: Request): Promise<Response> {
        ORDER BY window_start DESC LIMIT 1`,
       [connectionId],
     ),
+    query<HypeChatRow>(
+      `SELECT message_id, sender_user_id::text, sender_username, content, created_at
+       FROM chat_messages
+       WHERE connection_id = $1 AND created_at >= $2
+       ORDER BY created_at ASC`,
+      [connectionId, new Date(asOf - HYPE_LOOKBACK_MS).toISOString()],
+    ),
   ]);
+  const hype = computeHypeSnapshot(hypeRows, asOf);
   const suggestion = completedRows[0];
   const latest = latestRows[0];
   const generatedAt = suggestion?.generated_at ? new Date(suggestion.generated_at).getTime() : 0;
@@ -167,6 +188,7 @@ export async function GET(request: Request): Promise<Response> {
     (!suggestion || Date.now() - generatedAt > 90_000 || latest?.status === "failed");
   return Response.json(
     {
+      activeBet: staticWidgets.activeBet,
       actionBet: staticWidgets.actionBet,
       authenticated: true,
       channel: {
@@ -177,7 +199,9 @@ export async function GET(request: Request): Promise<Response> {
         streamTitle: connection.stream_title,
       },
       connected: connection.active,
-      hypeScore: suggestion?.hype_score ?? 0,
+      hypeReady: hype.ready,
+      hypeScore: hype.score,
+      hypeTrend: hype.trend,
       ingestionEnabled: true,
       live: connection.is_live,
       layout: parseOverlayLayout(connection.overlay_layout),

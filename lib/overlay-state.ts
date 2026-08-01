@@ -57,6 +57,12 @@ export interface OverlayActionBet {
 }
 
 export interface OverlayState {
+  readonly activeBet: {
+    readonly amount: number;
+    readonly payout: number | null;
+    readonly status: "pending" | "locked" | "won" | "lost";
+    readonly text: string;
+  } | null;
   readonly authenticated: true;
   readonly channel: {
     readonly category: string | null;
@@ -80,7 +86,9 @@ export interface OverlayState {
   };
   readonly connected: boolean;
   readonly goals?: readonly OverlayGoal[];
+  readonly hypeReady: boolean;
   readonly hypeScore: number;
+  readonly hypeTrend: "falling" | "rising" | "steady";
   readonly jar?: { readonly target: number; readonly units: number };
   readonly ingestionEnabled: boolean;
   readonly layout: OverlayLayout;
@@ -92,6 +100,10 @@ export interface OverlayState {
     readonly username: string;
   }[];
   readonly prediction: OverlayPrediction | null;
+  readonly privateContext?: {
+    readonly headline: string;
+    readonly notes: readonly string[];
+  };
   readonly screenLayouts: ScreenLayouts;
   readonly suggestion: {
     readonly basis: "chat" | "stream_context" | null;
@@ -117,6 +129,12 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
   const secondsFromNow = (seconds: number) => new Date(now.getTime() + seconds * 1_000).toISOString();
 
   return {
+    activeBet: {
+      amount: 50,
+      payout: null,
+      status: "pending",
+      text: "Talk to the girls on the left",
+    },
     actionBet: {
       backerCount: 9,
       category: "Performance",
@@ -158,7 +176,9 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       { current: 5, emoji: "⭐", key: "subs", label: "New subs", target: 5 },
       { current: 320, emoji: "🪙", key: "kicks", label: "KICKs gifted", target: 500 },
     ],
+    hypeReady: true,
     hypeScore: 84,
+    hypeTrend: "rising",
     ingestionEnabled: false,
     jar: { target: 1_000, units: 640 },
     layout: DEFAULT_OVERLAY_LAYOUT,
@@ -196,6 +216,13 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       status: "open",
       totalPoints: 700,
       winnerOptionIds: [],
+    },
+    privateContext: {
+      headline: "Keep the product name private until the reveal",
+      notes: [
+        "Demo the glasses before the phone view",
+        "Thank Mika for the raid when there is a natural pause",
+      ],
     },
     screenLayouts: { public: DEFAULT_OVERLAY_LAYOUT },
     suggestion: {

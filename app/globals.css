@@ -1711,7 +1711,7 @@ body:has(.glasses-hud) {
 .phone-tabs {
   display: grid;
   margin: 0.85rem 0.9rem 0;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   border-bottom: 1px solid rgb(255 255 255 / 7%);
 }
 
@@ -1761,11 +1761,29 @@ body:has(.glasses-hud) {
 .phone-suggestion-card,
 .phone-topic-card,
 .phone-chat-card,
-.phone-notes-card {
+.phone-notes-card,
+.phone-widgets-card {
   padding: 0.9rem;
   border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 1rem;
   background: #141915;
+}
+
+.phone-widgets-card p {
+  margin: 0.6rem 0 0;
+  color: #79837b;
+  font-size: 0.72rem;
+}
+
+/* Mirrors the studio's 9:16 phone canvas so arranged proportions match. */
+.phone-widgets-stage {
+  position: relative;
+  overflow: hidden;
+  margin-top: 0.6rem;
+  aspect-ratio: 9 / 16;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 0.75rem;
+  background: #0b0e0c;
 }
 
 .phone-suggestion-card {
@@ -2234,6 +2252,31 @@ body:has(.glasses-hud) {
   height: 100%;
 }
 
+/* Glasses editor canvas keeps the HUD's dark green-tinted backdrop under the
+   24×14 grid so the streamer arranges widgets in context. */
+.overlay-canvas.editor.screen-glasses {
+  background-color: #020504;
+  background-image:
+    radial-gradient(circle at 82% 20%, rgb(83 252 24 / 8%), transparent 32%),
+    radial-gradient(circle at 20% 80%, rgb(83 31 141 / 8%), transparent 34%),
+    linear-gradient(rgb(255 255 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 4%) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    calc(100% / 24) calc(100% / 14),
+    calc(100% / 24) calc(100% / 14);
+}
+
+/* Live widgets the streamer arranged for the glasses screen, floating above
+   the HUD sim. Pointer-transparent so HUD drag/keyboard controls still work. */
+.glasses-live-widgets {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
 .screen-canvas-stage.phone {
   padding: 1rem;
   border: 1px solid rgb(255 255 255 / 7%);
@@ -2268,6 +2311,15 @@ body:has(.glasses-hud) {
   width: min(100vw, 177.7778vh);
   aspect-ratio: 16 / 9;
   flex: none;
+}
+
+/* Locked live canvas hosted inside another surface (glasses HUD, phone tab)
+   instead of the fixed 1920×1080 OBS shell. */
+.overlay-canvas.public.live-embed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .canvas-widget {
@@ -2431,6 +2483,180 @@ body:has(.glasses-hud) {
 
 .canvas-widget .hype-copy {
   font-size: clamp(0.4rem, 2.6cqw, 0.82rem);
+}
+
+/* Slim hype bar strip — the horizontal hype meter designed to sit along the
+   top edge of a screen. Visual language ported from overlay/hype-meter.html:
+   band-blended fill, blurred glow layer, tick marks every 10 (bigger at
+   0/50/100) and a session-peak notch. Sized with container-query units so the
+   pill stays slim at any widget size; the live score arrives as CSS vars
+   (--bar-width/--bar-color/--bar-on/--bar-glow) set by the widget. */
+.hypebar-canvas-widget {
+  flex-direction: row;
+  align-items: center;
+  padding: 0 3cqw;
+  gap: 2.4cqw;
+}
+
+.hypebar-title {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 24cqw;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 0.35rem;
+  color: #a8afa9;
+  font-size: clamp(0.42rem, 24cqh, 0.8rem);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hypebar-title svg {
+  flex: 0 0 auto;
+  width: clamp(0.55rem, 26cqh, 0.95rem);
+  height: clamp(0.55rem, 26cqh, 0.95rem);
+  color: #53fc18;
+}
+
+.hypebar-title .editable-widget-text {
+  width: 100%;
+}
+
+.hypebar-track {
+  position: relative;
+  min-width: 0;
+  height: clamp(0.7rem, 44cqh, 2.6rem);
+  flex: 1;
+  border-radius: 999px;
+  background: rgb(28 38 32 / 95%);
+}
+
+.hypebar-glow,
+.hypebar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--bar-width, 0%);
+  min-width: clamp(0.7rem, 44cqh, 2.6rem); /* keeps the pill cap round at tiny values */
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bar-color, #5a6e75);
+  /* Smooth interpolated movement between live score polls — never snaps. */
+  transition:
+    width 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 900ms ease,
+    opacity 400ms ease;
+}
+
+.hypebar-fill {
+  opacity: var(--bar-on, 0);
+}
+
+.hypebar-fill::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(255 255 255 / 22%), transparent 55%);
+  content: ""; /* sheen so the fill reads as lit, not flat */
+}
+
+.hypebar-glow {
+  opacity: var(--bar-glow, 0);
+  filter: blur(clamp(4px, 16cqh, 13px));
+}
+
+.hypebar-peak {
+  position: absolute;
+  z-index: 1;
+  top: -14%;
+  bottom: -14%;
+  width: clamp(2px, 0.4cqw, 3px);
+  border-radius: 2px;
+  background: #b6ff8f;
+  box-shadow: 0 0 8px rgb(182 255 143 / 80%);
+  transform: translateX(-50%);
+  transition: left 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Ticks live on an inset rail so 0 and 100 land inside the pill's round caps. */
+.hypebar-ticks {
+  position: absolute;
+  inset: 0 clamp(0.35rem, 22cqh, 1.3rem);
+}
+
+.hypebar-ticks i {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 34%;
+  border-radius: 1px;
+  background: rgb(255 255 255 / 9%);
+  transform: translate(-50%, -50%);
+}
+
+.hypebar-ticks i.major {
+  width: 3px;
+  height: 60%;
+  background: rgb(255 255 255 / 16%);
+}
+
+.hypebar-readout {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.28rem;
+  color: var(--bar-color, #a8afa9);
+  font-variant-numeric: tabular-nums;
+  transition: color 900ms ease;
+}
+
+.hypebar-readout strong {
+  font-size: clamp(0.6rem, 38cqh, 1.5rem);
+  line-height: 1;
+}
+
+.hypebar-readout svg {
+  width: clamp(0.55rem, 28cqh, 1rem);
+  height: clamp(0.55rem, 28cqh, 1rem);
+}
+
+.hypebar-trend.rising {
+  color: #53fc18;
+}
+
+.hypebar-trend.falling {
+  color: #ff6d6d;
+}
+
+.hypebar-trend.steady {
+  color: #8fa192;
+}
+
+.hypebar-canvas-widget .preview-badge {
+  flex: 0 0 auto;
+}
+
+/* Calibrating: the meter is still learning the room's baseline, so the fill
+   breathes dimmed and the glow stays off — same signal as the hype widget's
+   Calibrating badge, translated to the bar. */
+.hypebar-canvas-widget.calibrating .hypebar-glow {
+  opacity: 0;
+}
+
+.hypebar-canvas-widget.calibrating .hypebar-fill {
+  animation: hypebar-calibrating 2.4s ease-in-out infinite;
+}
+
+@keyframes hypebar-calibrating {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
 }
 
 .remove-widget {

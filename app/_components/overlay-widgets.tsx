@@ -7,10 +7,14 @@ import {
   FlameIcon,
   GaugeIcon,
   HandshakeIcon,
+  MoveRightIcon,
   SkullIcon,
   SmilePlusIcon,
   TargetIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
   TrophyIcon,
+  ZapIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -37,9 +41,14 @@ export function WidgetHeader({
   );
 }
 
+interface OverlayWidgetProps {
+  readonly label?: ReactNode;
+  readonly state: OverlayState;
+}
+
 const PREDICTION_COLORS = ["#53fc18", "#ff6565", "#66a8ff", "#ffd23e"] as const;
 
-export function PredictionWidget({ state }: { readonly state: OverlayState }) {
+export function PredictionWidget({ label = "Prediction", state }: OverlayWidgetProps) {
   const prediction = state.prediction;
   const now = useWidgetClock(
     prediction?.opensAt,
@@ -49,7 +58,7 @@ export function PredictionWidget({ state }: { readonly state: OverlayState }) {
   if (!prediction) {
     return (
       <div className="canvas-widget-inner prediction-canvas-widget">
-        <WidgetHeader icon={<TrophyIcon size={17} />} label="Prediction" />
+        <WidgetHeader icon={<TrophyIcon size={17} />} label={label} />
         <p className="widget-waiting">Waiting for the next prediction…</p>
       </div>
     );
@@ -68,7 +77,7 @@ export function PredictionWidget({ state }: { readonly state: OverlayState }) {
 
   return (
     <div className={`canvas-widget-inner prediction-canvas-widget status-${status}`}>
-      <WidgetHeader icon={<TrophyIcon size={17} />} label="Prediction">
+      <WidgetHeader icon={<TrophyIcon size={17} />} label={label}>
         <span className={`interaction-status ${status}`}>{predictionStatusLabel(status, opensAt, locksAt, now)}</span>
       </WidgetHeader>
       <div className="prediction-widget-content">
@@ -105,14 +114,14 @@ export function PredictionWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function ActionBetWidget({ state }: { readonly state: OverlayState }) {
+export function ActionBetWidget({ label = "Action bet", state }: OverlayWidgetProps) {
   const actionBet = state.actionBet;
   const now = useWidgetClock(actionBet?.opensAt, actionBet?.status === "backing");
 
   if (!actionBet) {
     return (
       <div className="canvas-widget-inner action-bet-canvas-widget">
-        <WidgetHeader icon={<HandshakeIcon size={17} />} label="Action bet" />
+        <WidgetHeader icon={<HandshakeIcon size={17} />} label={label} />
         <p className="widget-waiting">Waiting for a viewer proposal…</p>
       </div>
     );
@@ -128,7 +137,7 @@ export function ActionBetWidget({ state }: { readonly state: OverlayState }) {
 
   return (
     <div className={`canvas-widget-inner action-bet-canvas-widget status-${status}`}>
-      <WidgetHeader icon={<HandshakeIcon size={17} />} label="Action bet">
+      <WidgetHeader icon={<HandshakeIcon size={17} />} label={label}>
         <span className={`interaction-status ${status}`}>{actionBetStatusLabel(status, locksAt, now)}</span>
       </WidgetHeader>
       <div className="action-bet-widget-content">
@@ -146,11 +155,11 @@ export function ActionBetWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function GoalsWidget({ state }: { readonly state: OverlayState }) {
+export function GoalsWidget({ label = "Stream goals", state }: OverlayWidgetProps) {
   const goals = state.goals ?? [];
   return (
     <div className="canvas-widget-inner goals-canvas-widget">
-      <WidgetHeader icon={<TargetIcon size={17} />} label="Stream goals">
+      <WidgetHeader icon={<TargetIcon size={17} />} label={label}>
         <span className="count-badge">{goals.filter((goal) => goal.current >= goal.target).length}/{goals.length}</span>
       </WidgetHeader>
       <div className="goals-list">
@@ -177,14 +186,14 @@ export function GoalsWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function LeaderboardWidget({ state }: { readonly state: OverlayState }) {
+export function LeaderboardWidget({ label = "Top supporters", state }: OverlayWidgetProps) {
   // A gifted sub is worth 100 KICKs when ranking supporters.
   const supporters = [...(state.supporters ?? [])]
     .sort((a, b) => (b.kicks + b.giftedSubs * 100) - (a.kicks + a.giftedSubs * 100))
     .slice(0, 5);
   return (
     <div className="canvas-widget-inner board-canvas-widget">
-      <WidgetHeader icon={<CrownIcon size={17} />} label="Top supporters">
+      <WidgetHeader icon={<CrownIcon size={17} />} label={label}>
         <span className="count-badge">session</span>
       </WidgetHeader>
       <div className="board-list">
@@ -202,13 +211,13 @@ export function LeaderboardWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function BattleWidget({ state }: { readonly state: OverlayState }) {
+export function BattleWidget({ label = "Hype battle", state }: OverlayWidgetProps) {
   const battle = state.battle ?? { fire: 0, water: 0, wins: { fire: 0, water: 0 } };
   const total = battle.fire + battle.water;
   const firePercentage = total > 0 ? (battle.fire / total) * 100 : 50;
   return (
     <div className="canvas-widget-inner battle-canvas-widget">
-      <WidgetHeader icon={<FlameIcon size={17} />} label="Hype battle">
+      <WidgetHeader icon={<FlameIcon size={17} />} label={label}>
         <span className="count-badge">🔥 {battle.wins.fire} · {battle.wins.water} 💧</span>
       </WidgetHeader>
       <div className="battle-content">
@@ -228,13 +237,13 @@ export function BattleWidget({ state }: { readonly state: OverlayState }) {
 
 const BOSS_SPRITES = ["👹", "🐉", "👾", "🤖", "💀", "🦑"] as const;
 
-export function BossWidget({ state }: { readonly state: OverlayState }) {
+export function BossWidget({ label = "Stream boss", state }: OverlayWidgetProps) {
   const boss = state.boss ?? { hp: 500, level: 1, maxHp: 500, topDamage: [] };
   const hpPercentage = boss.maxHp > 0 ? Math.max(0, Math.min(100, (boss.hp / boss.maxHp) * 100)) : 0;
   const sprite = boss.hp <= 0 ? "💥" : BOSS_SPRITES[(boss.level - 1) % BOSS_SPRITES.length];
   return (
     <div className="canvas-widget-inner boss-canvas-widget">
-      <WidgetHeader icon={<SkullIcon size={17} />} label="Stream boss">
+      <WidgetHeader icon={<SkullIcon size={17} />} label={label}>
         <span className="count-badge">Lv {boss.level}</span>
       </WidgetHeader>
       <div className="boss-content">
@@ -257,13 +266,13 @@ export function BossWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function JarWidget({ state }: { readonly state: OverlayState }) {
+export function JarWidget({ label = "Support jar", state }: OverlayWidgetProps) {
   const jar = state.jar ?? { target: 1_000, units: 0 };
   const percentage = jar.target > 0 ? Math.min(100, Math.round((jar.units / jar.target) * 100)) : 0;
   const full = jar.units >= jar.target;
   return (
     <div className="canvas-widget-inner jar-canvas-widget">
-      <WidgetHeader icon={<CoinsIcon size={17} />} label="Support jar">
+      <WidgetHeader icon={<CoinsIcon size={17} />} label={label}>
         <span className="count-badge">{percentage}%</span>
       </WidgetHeader>
       <div className="jar-content">
@@ -279,7 +288,7 @@ export function JarWidget({ state }: { readonly state: OverlayState }) {
 
 const ALERT_ROTATE_MS = 4_000;
 
-export function AlertsWidget({ state }: { readonly state: OverlayState }) {
+export function AlertsWidget({ label = "Alerts", state }: OverlayWidgetProps) {
   const alerts = state.alerts ?? [];
   const [index, setIndex] = useState(0);
 
@@ -295,7 +304,7 @@ export function AlertsWidget({ state }: { readonly state: OverlayState }) {
   const alert = alerts[index % Math.max(1, alerts.length)];
   return (
     <div className="canvas-widget-inner alerts-canvas-widget">
-      <WidgetHeader icon={<BellRingIcon size={17} />} label="Alerts">
+      <WidgetHeader icon={<BellRingIcon size={17} />} label={label}>
         {alerts.length > 1 ? <span className="count-badge">+{alerts.length - 1} queued</span> : null}
       </WidgetHeader>
       <div className="alerts-content">
@@ -326,7 +335,7 @@ interface Floater {
   readonly x: number;
 }
 
-export function EmoteWallWidget({ state }: { readonly state: OverlayState }) {
+export function EmoteWallWidget({ label = "Emote wall", state }: OverlayWidgetProps) {
   const [floaters, setFloaters] = useState<readonly Floater[]>([]);
   const sequence = useRef(0);
   const emojiPool = [...extractEmoji(state.messages.map((message) => message.content).join(" ")), ...EMOTE_POOL];
@@ -356,7 +365,7 @@ export function EmoteWallWidget({ state }: { readonly state: OverlayState }) {
 
   return (
     <div className="canvas-widget-inner wall-canvas-widget">
-      <WidgetHeader icon={<SmilePlusIcon size={17} />} label="Emote wall" />
+      <WidgetHeader icon={<SmilePlusIcon size={17} />} label={label} />
       <div aria-hidden className="wall-stage">
         {floaters.map((floater) => (
           <span
@@ -376,12 +385,12 @@ export function EmoteWallWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function PulseWidget({ state }: { readonly state: OverlayState }) {
+export function PulseWidget({ label = "Chat pulse", state }: OverlayWidgetProps) {
   const bars = velocityBars(state.hypeScore, state.messages.length);
   const words = trendingWords(state.messages.map((message) => message.content));
   return (
     <div className="canvas-widget-inner pulse-canvas-widget">
-      <WidgetHeader icon={<GaugeIcon size={17} />} label="Chat pulse">
+      <WidgetHeader icon={<GaugeIcon size={17} />} label={label}>
         <span className="count-badge">{Math.max(1, Math.round(state.hypeScore / 6))} msg/min</span>
       </WidgetHeader>
       <div className="pulse-content">
@@ -480,6 +489,83 @@ function formatRemaining(milliseconds: number): string {
   const seconds = Math.max(0, Math.ceil(milliseconds / 1_000));
   if (seconds < 60) return `${seconds}s`;
   return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+// Colour bands ported from overlay/hype-meter.html: the fill blends steel
+// blue → amber → kick green → white-hot as the score climbs, so the
+// engagement band is readable from colour alone.
+const HYPE_BAR_BANDS: readonly {
+  readonly at: number;
+  readonly rgb: readonly [number, number, number];
+}[] = [
+  { at: 0, rgb: [90, 110, 117] },
+  { at: 35, rgb: [255, 176, 32] },
+  { at: 70, rgb: [83, 252, 24] },
+  { at: 100, rgb: [182, 255, 143] },
+];
+
+export function hypeBarColor(score: number): string {
+  const value = Math.max(0, Math.min(100, score));
+  const upperIndex = Math.max(1, HYPE_BAR_BANDS.findIndex((band) => value <= band.at));
+  const hi = HYPE_BAR_BANDS[upperIndex];
+  const lo = HYPE_BAR_BANDS[upperIndex - 1];
+  const fraction = (value - lo.at) / (hi.at - lo.at);
+  const channel = (index: 0 | 1 | 2) => Math.round(lo.rgb[index] + (hi.rgb[index] - lo.rgb[index]) * fraction);
+  return `rgb(${channel(0)} ${channel(1)} ${channel(2)})`;
+}
+
+const HYPE_BAR_TICKS = Array.from({ length: 11 }, (_, index) => index * 10);
+
+const TREND_ICONS = {
+  falling: TrendingDownIcon,
+  rising: TrendingUpIcon,
+  steady: MoveRightIcon,
+} as const;
+
+/**
+ * Slim strip version of the hype meter, meant to sit along the top edge of a
+ * screen. Same live engine fields as the hype widget (hypeScore/hypeReady/
+ * hypeTrend) — never a static score in the live path; the fill and colour
+ * band move with the room.
+ */
+export function HypeBarWidget({ label = "Hype bar", state }: OverlayWidgetProps) {
+  const score = Math.max(0, Math.min(100, Math.round(state.hypeScore)));
+  const status = !state.ingestionEnabled ? "Preview" : state.hypeReady ? "Live" : "Calibrating";
+  const calibrating = status === "Calibrating";
+  // Session peak: the notch parks at the highest score this view has seen.
+  const [peak, setPeak] = useState(0);
+  useEffect(() => {
+    if (!calibrating) setPeak((current) => Math.max(current, score));
+  }, [calibrating, score]);
+  const TrendIcon = TREND_ICONS[state.hypeTrend];
+  return (
+    <div
+      className={`canvas-widget-inner hypebar-canvas-widget${calibrating ? " calibrating" : ""}`}
+      style={{
+        "--bar-color": hypeBarColor(score),
+        "--bar-glow": score >= 1 ? 0.25 + 0.45 * (score / 100) : 0,
+        "--bar-on": score >= 1 ? 1 : 0,
+        "--bar-width": `${score}%`,
+      } as CSSProperties}
+    >
+      <span className="hypebar-title"><ZapIcon size={15} />{label}</span>
+      <div aria-label={`Hype score ${score} out of 100`} className="hypebar-track">
+        <span aria-hidden className="hypebar-ticks">
+          {HYPE_BAR_TICKS.map((tick) => (
+            <i className={tick % 50 === 0 ? "major" : undefined} key={tick} style={{ left: `${tick}%` }} />
+          ))}
+        </span>
+        <i className="hypebar-glow" />
+        <i className="hypebar-fill" />
+        {peak > 0 ? <i className="hypebar-peak" style={{ left: `${peak}%` }} /> : null}
+      </div>
+      <span className="hypebar-readout">
+        <strong>{score}</strong>
+        <TrendIcon aria-label={`Hype ${state.hypeTrend}`} className={`hypebar-trend ${state.hypeTrend}`} size={15} />
+      </span>
+      <span className="preview-badge">{status}</span>
+    </div>
+  );
 }
 
 function supporterDetail(kicks: number, giftedSubs: number): string {

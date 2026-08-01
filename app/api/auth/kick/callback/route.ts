@@ -9,7 +9,7 @@ import {
   getKickProfile,
   subscribeToKickEvents,
 } from "@/lib/kick/oauth";
-import { findOwnerConnection, upsertKickConnection } from "@/lib/kick/repository";
+import { findConnectionByKickUserId, upsertKickConnection } from "@/lib/kick/repository";
 import { constantTimeEqual, decryptJson } from "@/lib/security";
 import {
   createAppSession,
@@ -53,11 +53,12 @@ export async function GET(request: Request): Promise<Response> {
         createStatelessAppSession({ accessToken: token.access_token, channel, profile }),
       );
     }
-    const owner = await findOwnerConnection();
-    if (owner && owner.kick_user_id !== profile.userId) return errorRedirect("owner_already_connected");
-
-    if (owner?.subscription_ids.length) {
-      await deleteKickSubscriptions(token.access_token, owner.subscription_ids);
+    // Connections are keyed by kick_user_id (one row per Kick account), so a
+    // returning user replaces their own row. Clear their previous webhook
+    // subscriptions before re-subscribing; other users' connections coexist.
+    const previous = await findConnectionByKickUserId(profile.userId);
+    if (previous?.subscription_ids.length) {
+      await deleteKickSubscriptions(token.access_token, previous.subscription_ids);
     }
 
     const subscriptionIds = await subscribeToKickEvents(token.access_token);

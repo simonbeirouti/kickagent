@@ -2,11 +2,18 @@ import { sleep } from "workflow";
 import { cleanupExpiredData as deleteExpiredData } from "@/lib/cleanup";
 import { query } from "@/lib/db";
 import { generateSuggestion } from "@/lib/generate-suggestion";
+import { computeHypeContext, type HypeChatRow } from "@/lib/hype";
 import { findConnectionById } from "@/lib/kick/repository";
 import {
+  toRequestHype,
   type PromptChatMessage,
   type SuggestionGenerationRequest,
 } from "@/lib/suggestions";
+
+// Trailing lookback the hype engine replays each tick to compute its signal. Must
+// comfortably exceed HypeEngine's default 45s warm-up so `ready` reflects a locked
+// baseline rather than the workflow step's own cold start.
+const HYPE_LOOKBACK_MS = 3 * 60_000;
 
 interface WindowPlan {
   readonly dueAt: string;
@@ -168,7 +175,8 @@ async function analyzeWindow(
     [connectionId, windowStart, windowEnd],
   );
 
-  const [cachedRows, recentSuggestionRows] = await Promise.all([
+  const windowEndMs = new Date(windowEnd).getTime();
+  const [cachedRows, recentSuggestionRows, hypeLookbackRows] = await Promise.all([
     query<ChatRow>(
       `SELECT message_id, sender_username, content, created_at
        FROM chat_messages
@@ -184,9 +192,20 @@ async function analyzeWindow(
        ORDER BY window_start DESC LIMIT 4`,
       [connectionId],
     ),
+    query<HypeChatRow>(
+      `SELECT message_id, sender_user_id::text, sender_username, content, created_at
+       FROM chat_messages
+       WHERE connection_id = $1 AND created_at >= $2 AND created_at < $3
+       ORDER BY created_at ASC`,
+      [connectionId, new Date(windowEndMs - HYPE_LOOKBACK_MS).toISOString(), windowEnd],
+    ),
   ]);
+  // Full engine read — score/trend, topic momentum, trending gap, spam flags,
+  // and the last highlight — feeds the agent as the prompt's HYPE STATE block.
+  const hype = computeHypeContext(hypeLookbackRows, windowEndMs);
   const suggestionRequest: SuggestionGenerationRequest = {
     categoryName: connection.category_name ?? undefined,
+    hype: toRequestHype(hype),
     messages: cachedRows.reverse().map(toPromptMessage),
     recentSuggestions: recentSuggestionRows.map((row) => row.suggestion),
     streamTitle: connection.stream_title ?? undefined,
@@ -202,10 +221,17 @@ async function analyzeWindow(
   const startedAt = Date.now();
   const statement = await generateSuggestion(suggestionRequest);
   const basis = suggestionRequest.messages.length > 0 ? "chat" : "stream_context";
+  // Surfaces the engine-computed hype next to the agent's read in run logs.
   console.info("[suggestion:analysis] completed", {
     basis,
     connectionId,
     durationMs: Date.now() - startedAt,
+    hypeFlaggedSpammers: hype.flaggedSpammers.length,
+    hypeHighlight: hype.lastHighlight?.headline ?? null,
+    hypeReady: hype.ready,
+    hypeScore: hype.score,
+    hypeTrend: hype.trend,
+    hypeTrendingGap: hype.trendingGap,
     messageIds: cachedRows.map((row) => row.message_id),
     reason,
     windowEnd,

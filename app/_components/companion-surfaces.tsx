@@ -9,17 +9,19 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { OverlayCanvas } from "@/app/_components/overlay-canvas";
 import { useLiveOverlayState } from "@/lib/live-overlay-store";
-import type { OverlayState } from "@/lib/overlay-state";
 
-type PhonePanel = "brief" | "chat" | "summary";
+type PhonePanel = "brief" | "chat" | "summary" | "widgets";
 
 export function StreamerPhoneSurface({ publicMode = false }: { readonly publicMode?: boolean }) {
   const liveState = useLiveOverlayState({ publicMode });
+  // Hook order must not depend on whether live state has arrived yet.
+  const [panel, setPanel] = useState<PhonePanel>("brief");
   if (!liveState.state) return <SurfaceStatus error={liveState.error} publicMode={publicMode} />;
   const state = liveState.state;
-  const [panel, setPanel] = useState<PhonePanel>("brief");
   const topics = state.summary?.topics ?? [];
+  const phoneLayout = state.screenLayouts?.phone ?? [];
   return (
     <main className="phone-demo-stage">
       <div className="phone-device">
@@ -48,7 +50,7 @@ export function StreamerPhoneSurface({ publicMode = false }: { readonly publicMo
           </section>
 
           <nav aria-label="Phone information panels" className="phone-tabs">
-            {(["brief", "chat", "summary"] as const).map((item) => (
+            {(["brief", "chat", "summary", "widgets"] as const).map((item) => (
               <button
                 aria-label={`${item}${item === "chat" ? `, ${state.messages.length} messages` : ""}`}
                 className={panel === item ? "active" : undefined}
@@ -101,6 +103,25 @@ export function StreamerPhoneSurface({ publicMode = false }: { readonly publicMo
                 <span className="phone-section-label"><ShieldAlertIcon size={13} /> Agent live summary</span>
                 <h2>{state.summary?.text ?? "Waiting for the first agent brief…"}</h2>
                 {topics.length > 0 ? <ul>{topics.map((topic) => <li key={topic.label}>{topic.label}</li>)}</ul> : null}
+              </section>
+            ) : null}
+
+            {panel === "widgets" ? (
+              <section className="phone-widgets-card">
+                <span className="phone-section-label"><ZapIcon size={13} /> Your arranged widgets</span>
+                {phoneLayout.length === 0 ? (
+                  <p>Arrange widgets for the phone screen in the overlay studio.</p>
+                ) : (
+                  <div className="phone-widgets-stage">
+                    <OverlayCanvas
+                      embedded
+                      layout={phoneLayout}
+                      publicMode
+                      screen="phone"
+                      state={state}
+                    />
+                  </div>
+                )}
               </section>
             ) : null}
           </div>
