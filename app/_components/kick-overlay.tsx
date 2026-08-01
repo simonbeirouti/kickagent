@@ -391,7 +391,9 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
   return (
     <div className="canvas-widget-inner hype-canvas-widget">
       <WidgetHeader icon={<ActivityIcon size={17} />} label="Hype score">
-        <span className="preview-badge">{state.hypeReady ? "Live" : "Calibrating"}</span>
+        <span className="preview-badge">
+          {!state.ingestionEnabled ? "Preview" : state.hypeReady ? "Live" : "Calibrating"}
+        </span>
       </WidgetHeader>
       <div className="hype-content">
         <div
@@ -467,6 +469,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 function hypeLabel(state: OverlayState): string {
+  if (!state.ingestionEnabled) return "Sample data";
   if (!state.hypeReady) return "Learning this chat's baseline…";
   if (state.hypeTrend === "rising") return "Heating up";
   if (state.hypeTrend === "falling") return "Cooling off";

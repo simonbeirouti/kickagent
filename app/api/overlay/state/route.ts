@@ -63,10 +63,12 @@ export async function GET(request: Request): Promise<Response> {
           streamTitle: channel.streamTitle ?? null,
         },
         connected: true,
-        // Stateless mode stores no chat, so the hype engine has no input to
-        // replay — report a cold engine instead of a made-up score.
+        // Stateless mode is a profile/layout preview with no chat ingestion,
+        // so the hype engine has no input to replay. Ship a sample score so
+        // the layout canvas looks real; hypeReady=false + ingestionEnabled=
+        // false let the widget label it as preview data.
         hypeReady: false,
-        hypeScore: 0,
+        hypeScore: 72,
         hypeTrend: "steady",
         ingestionEnabled: false,
         live: channel.isLive,
