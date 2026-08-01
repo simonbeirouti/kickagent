@@ -3,10 +3,25 @@ import { z } from "zod";
 export const OVERLAY_COLUMNS = 24;
 export const OVERLAY_ROWS = 14;
 
-export const widgetKindSchema = z.enum(["suggestion", "chat", "hype"]);
+export const widgetKindSchema = z.enum([
+  "suggestion",
+  "chat",
+  "hype",
+  "goals",
+  "leaderboard",
+  "battle",
+  "boss",
+  "jar",
+  "alerts",
+  "emotes",
+  "pulse",
+]);
 export type WidgetKind = z.infer<typeof widgetKindSchema>;
 export const managedScreenSchema = z.enum(["glasses", "phone", "public"]);
 export type ManagedScreen = z.infer<typeof managedScreenSchema>;
+
+// One widget per kind, so a layout can never hold more than the kind count.
+export const MAX_WIDGETS = widgetKindSchema.options.length;
 
 export const widgetPlacementSchema = z
   .object({
@@ -22,7 +37,7 @@ export const widgetPlacementSchema = z
 
 export const overlayLayoutSchema = z
   .array(widgetPlacementSchema)
-  .max(3)
+  .max(MAX_WIDGETS)
   .refine((items) => new Set(items.map((item) => item.id)).size === items.length, {
     message: "Widget IDs must be unique.",
   })
@@ -47,8 +62,16 @@ export const DEFAULT_OVERLAY_LAYOUT: OverlayLayout = [
 ];
 
 export const WIDGET_DEFAULTS: Readonly<Record<WidgetKind, WidgetPlacement>> = {
+  alerts: { height: 5, id: "alerts", kind: "alerts", width: 7, x: 8, y: 0 },
+  battle: { height: 4, id: "battle", kind: "battle", width: 10, x: 7, y: 10 },
+  boss: { height: 6, id: "boss", kind: "boss", width: 7, x: 0, y: 8 },
   chat: { height: 6, id: "chat", kind: "chat", width: 8, x: 16, y: 1 },
+  emotes: { height: 8, id: "emotes", kind: "emotes", width: 6, x: 0, y: 3 },
+  goals: { height: 6, id: "goals", kind: "goals", width: 8, x: 0, y: 0 },
   hype: { height: 5, id: "hype", kind: "hype", width: 8, x: 16, y: 8 },
+  jar: { height: 7, id: "jar", kind: "jar", width: 5, x: 10, y: 4 },
+  leaderboard: { height: 7, id: "leaderboard", kind: "leaderboard", width: 7, x: 16, y: 0 },
+  pulse: { height: 6, id: "pulse", kind: "pulse", width: 8, x: 8, y: 8 },
   suggestion: { height: 10, id: "suggestion", kind: "suggestion", width: 14, x: 1, y: 2 },
 };
 

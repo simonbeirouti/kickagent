@@ -2,21 +2,40 @@
 
 import {
   ActivityIcon,
+  BellRingIcon,
   Clock3Icon,
+  CoinsIcon,
+  CrownIcon,
   ExternalLinkIcon,
+  FlameIcon,
+  GaugeIcon,
   GlassesIcon,
   GripVerticalIcon,
   LogOutIcon,
   MessageCircleIcon,
   MonitorUpIcon,
   RadioIcon,
+  SkullIcon,
   SmartphoneIcon,
+  SmilePlusIcon,
   SparklesIcon,
+  TargetIcon,
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
 import { useState } from "react";
-import type { CSSProperties, DragEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent } from "react";
+import {
+  AlertsWidget,
+  BattleWidget,
+  BossWidget,
+  EmoteWallWidget,
+  GoalsWidget,
+  JarWidget,
+  LeaderboardWidget,
+  PulseWidget,
+  WidgetHeader,
+} from "@/app/_components/overlay-widgets";
 import { useLiveOverlayState } from "@/lib/live-overlay-store";
 import {
   OVERLAY_COLUMNS,
@@ -49,10 +68,27 @@ const MANAGED_SCREENS: readonly {
 ];
 
 const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
+  alerts: "Alerts",
+  battle: "Hype battle",
+  boss: "Stream boss",
   chat: "Latest chat",
+  emotes: "Emote wall",
+  goals: "Stream goals",
   hype: "Agent energy",
+  jar: "Support jar",
+  leaderboard: "Top supporters",
+  pulse: "Chat pulse",
   suggestion: "Live brief",
 };
+
+const WIDGET_GROUPS: readonly {
+  readonly kinds: readonly WidgetKind[];
+  readonly label: string;
+}[] = [
+  { kinds: ["suggestion", "chat", "hype"], label: "Agent" },
+  { kinds: ["goals", "leaderboard", "jar", "alerts"], label: "Community" },
+  { kinds: ["battle", "boss", "emotes", "pulse"], label: "Hype & fun" },
+];
 
 export function KickOverlay({
   accessToken,
@@ -190,27 +226,34 @@ function WidgetLibrary({
         <h2>Build your screen</h2>
         <p className="library-copy">Choose the live widgets to show, then position them on the canvas.</p>
       </div>
-      <div className="library-list">
-        {(["suggestion", "chat", "hype"] as const).map((kind) => {
-          const added = layout.some((item) => item.kind === kind);
-          return (
-            <button
-              className="library-widget"
-              disabled={added}
-              draggable={!added}
-              key={kind}
-              onClick={() => {
-                if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
-              }}
-              onDragStart={(event) => startLibraryDrag(event, kind)}
-              type="button"
-            >
-              <WidgetKindIcon kind={kind} />
-              <span>{WIDGET_LABELS[kind]}</span>
-              <GripVerticalIcon className="library-grip" size={16} />
-            </button>
-          );
-        })}
+      <div className="library-groups">
+        {WIDGET_GROUPS.map((group) => (
+          <div className="library-group" key={group.label}>
+            <p className="library-group-label">{group.label}</p>
+            <div className="library-list">
+              {group.kinds.map((kind) => {
+                const added = layout.some((item) => item.kind === kind);
+                return (
+                  <button
+                    className="library-widget"
+                    disabled={added}
+                    draggable={!added}
+                    key={kind}
+                    onClick={() => {
+                      if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
+                    }}
+                    onDragStart={(event) => startLibraryDrag(event, kind)}
+                    type="button"
+                  >
+                    <WidgetKindIcon kind={kind} />
+                    <span>{WIDGET_LABELS[kind]}</span>
+                    <GripVerticalIcon className="library-grip" size={16} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
       <p className="save-indicator" aria-live="polite">
         {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
@@ -304,6 +347,14 @@ function WidgetContent({
   readonly kind: WidgetKind;
   readonly state: OverlayState;
 }) {
+  if (kind === "goals") return <GoalsWidget state={state} />;
+  if (kind === "leaderboard") return <LeaderboardWidget state={state} />;
+  if (kind === "battle") return <BattleWidget state={state} />;
+  if (kind === "boss") return <BossWidget state={state} />;
+  if (kind === "jar") return <JarWidget state={state} />;
+  if (kind === "alerts") return <AlertsWidget state={state} />;
+  if (kind === "emotes") return <EmoteWallWidget state={state} />;
+  if (kind === "pulse") return <PulseWidget state={state} />;
   if (kind === "suggestion") {
     return (
       <div className="canvas-widget-inner suggestion-canvas-widget">
@@ -373,14 +424,23 @@ function WidgetContent({
   );
 }
 
-function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: ReactNode }) {
-  return <header className="widget-header"><span className="widget-title">{icon}{label}</span>{children}</header>;
-}
+const WIDGET_ICONS: Readonly<Record<WidgetKind, typeof SparklesIcon>> = {
+  alerts: BellRingIcon,
+  battle: FlameIcon,
+  boss: SkullIcon,
+  chat: MessageCircleIcon,
+  emotes: SmilePlusIcon,
+  goals: TargetIcon,
+  hype: ActivityIcon,
+  jar: CoinsIcon,
+  leaderboard: CrownIcon,
+  pulse: GaugeIcon,
+  suggestion: SparklesIcon,
+};
 
 function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
-  if (kind === "chat") return <MessageCircleIcon size={17} />;
-  if (kind === "hype") return <ActivityIcon size={17} />;
-  return <SparklesIcon size={17} />;
+  const Icon = WIDGET_ICONS[kind];
+  return <Icon size={17} />;
 }
 
 function StatusPill({ live }: { readonly live: boolean }) {
