@@ -27,6 +27,33 @@ export function useDemoOverlayState(initialState: OverlayState): OverlayState {
   return state;
 }
 
+export function usePublicDemoOverlayState(initialState: OverlayState, enabled = true): OverlayState {
+  const [state, setState] = useState(initialState);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/demo-overlay/state", { cache: "no-store" });
+        if (!response.ok) return;
+        const next = await response.json() as OverlayState;
+        if (!cancelled) setState(next);
+      } catch {
+        // Keep the last known overlay state while the server is unavailable.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 1_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [enabled]);
+
+  return state;
+}
+
 export function readDemoOverlayState(fallback: OverlayState): OverlayState {
   try {
     const current = window.localStorage.getItem(STORAGE_KEY);
@@ -62,6 +89,13 @@ export function publishDemoOverlayState(state: OverlayState): OverlayState {
   const channel = new BroadcastChannel(STATE_CHANNEL);
   channel.postMessage(next);
   channel.close();
+  void fetch("/api/demo-overlay/state", {
+    body: JSON.stringify(next),
+    headers: { "content-type": "application/json" },
+    method: "PUT",
+  }).catch(() => {
+    // Local storage remains the fallback when the demo server is unavailable.
+  });
   return next;
 }
 

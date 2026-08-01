@@ -16,9 +16,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
+import { GlassesSurface } from "@/app/_components/companion-surfaces";
 import {
   publishDemoOverlayState,
   useDemoOverlayState,
+  usePublicDemoOverlayState,
 } from "@/lib/demo-overlay-store";
 import {
   OVERLAY_COLUMNS,
@@ -64,7 +66,9 @@ export function KickOverlay({
   readonly initialState: OverlayState;
   readonly publicMode?: boolean;
 }) {
-  const state = useDemoOverlayState(initialState);
+  const localState = useDemoOverlayState(initialState);
+  const publicState = usePublicDemoOverlayState(initialState, publicMode);
+  const state = publicMode ? publicState : localState;
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [selectedScreen, setSelectedScreen] = useState<ManagedScreen>("public");
 
@@ -135,7 +139,11 @@ export function KickOverlay({
             <span>Drag widgets onto the screen</span>
           </div>
           <div className={`screen-canvas-stage ${selectedScreen}`}>
-            <OverlayCanvas layout={activeLayout} onLayoutChange={(next) => void saveActiveLayout(next)} screen={selectedScreen} state={state} />
+            {selectedScreen === "glasses" ? (
+              <GlassesSurface />
+            ) : (
+              <OverlayCanvas layout={activeLayout} onLayoutChange={(next) => void saveActiveLayout(next)} screen={selectedScreen} state={state} />
+            )}
           </div>
         </section>
       </div>
@@ -312,7 +320,7 @@ function WidgetContent({
             <div className="chat-message" key={message.id}>
               <span className="chat-user">{message.username}</span>
               <span className="chat-copy">{message.content}</span>
-              <time>{relativeTime(message.createdAt)}</time>
+              <time suppressHydrationWarning>{relativeTime(message.createdAt)}</time>
             </div>
           ))}
         </div>
@@ -357,7 +365,7 @@ function StatusPill({ live }: { readonly live: boolean }) {
 }
 
 function Freshness({ generatedAt, stale }: { readonly generatedAt?: string; readonly stale?: boolean }) {
-  return <span className={stale ? "freshness stale" : "freshness"}><Clock3Icon size={13} />{generatedAt ? (stale ? "Delayed" : relativeTime(generatedAt)) : "Waiting"}</span>;
+  return <span className={stale ? "freshness stale" : "freshness"} suppressHydrationWarning><Clock3Icon size={13} />{generatedAt ? (stale ? "Delayed" : relativeTime(generatedAt)) : "Waiting"}</span>;
 }
 
 function startLibraryDrag(event: DragEvent<HTMLButtonElement>, kind: WidgetKind) {
