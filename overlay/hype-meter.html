@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hype Meter — Kick-Ass(istant)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --kick-green: #53fc18;
+    --amber: #ffb020;
+    --red: #ff4d4d;
+    --text: #f2f5f0;
+    --muted: #8fa192;
+    --glass: rgba(14, 20, 15, 0.66);
+    --glass-border: rgba(83, 252, 24, 0.16);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Space Grotesk', -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1100px 750px at 72% -12%, rgba(83, 252, 24, 0.10), transparent 62%),
+      radial-gradient(900px 650px at 8% 112%, rgba(83, 252, 24, 0.06), transparent 60%),
+      radial-gradient(1400px 900px at 50% 50%, #0d1310 0%, #07090a 70%);
+  }
+  body.transparent { background: transparent; }
+  body::after { /* subtle vignette to seat the widget on any footage */
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0,0,0,0.45));
+  }
+  body.transparent::after { display: none; }
+
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+  #stage { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 5vw; z-index: 2; }
+
+  /* ---- Gauge ---- */
+  #gauge-wrap { position: relative; width: 440px; text-align: center; }
+  #gauge-wrap.tier2 #score { animation: pulse 0.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+  #score {
+    font-family: 'Archivo Black', 'Space Grotesk', sans-serif;
+    font-size: 6rem; font-weight: 400; line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  }
+  #score small { font-size: 1.6rem; color: var(--muted); font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+  #tier-label {
+    margin-top: 0.55rem; font-size: 1.05rem; font-weight: 700;
+    letter-spacing: 0.42em; text-transform: uppercase; color: var(--muted);
+    text-indent: 0.42em; /* optically centre the tracked text */
+  }
+  #stats { margin-top: 0.55rem; font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #spark { display: block; margin: 0.7rem auto 0; opacity: 0.9; }
+  .center-text { position: absolute; top: 51%; left: 50%; transform: translate(-50%, -50%); width: 100%; }
+  #brand {
+    font-size: 0.72rem; letter-spacing: 0.34em; color: var(--kick-green);
+    text-transform: uppercase; margin-bottom: 0.7rem; font-weight: 700; text-indent: 0.34em;
+  }
+
+  /* ---- Right rail ---- */
+  #topics { width: 400px; }
+
+  .card {
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: 18px; padding: 1.1rem 1.35rem;
+    backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* Biggest-number highlight card */
+  #bignum {
+    margin-bottom: 1.1rem;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.4s, transform 0.4s, border-color 0.4s, box-shadow 0.4s;
+  }
+  #bignum.on { opacity: 1; transform: none; }
+  #bignum.fresh {
+    border-color: var(--kick-green);
+    box-shadow: 0 0 34px rgba(83, 252, 24, 0.22), 0 18px 50px rgba(0, 0, 0, 0.45);
+  }
+  #bignum .label { font-size: 0.68rem; letter-spacing: 0.26em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem; font-weight: 700; }
+  #bignum .amount {
+    font-family: 'Archivo Black', sans-serif; font-size: 2.7rem; line-height: 1.12;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(180deg, #d6ffc2, var(--kick-green) 70%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 14px rgba(83, 252, 24, 0.35));
+  }
+  #bignum .who { font-size: 0.92rem; color: var(--muted); margin-top: 0.25rem; }
+  #bignum .who b { color: var(--text); }
+
+  #topics h3 {
+    font-size: 0.72rem; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--kick-green); margin: 0 0 1rem 0.2rem; font-weight: 700;
+  }
+  #topic-card { padding: 1.2rem 1.35rem 0.9rem; }
+  .topic {
+    display: grid; grid-template-columns: 1.5rem 1fr; grid-template-rows: auto 8px;
+    column-gap: 0.7rem; row-gap: 0.3rem; align-items: baseline;
+    margin: 0 0 0.85rem; opacity: 0; transform: translateY(6px);
+    transition: opacity 0.4s, transform 0.4s;
+  }
+  .topic.on { opacity: 1; transform: none; }
+  .topic .rank {
+    grid-row: 1 / 3; align-self: center;
+    font-size: 0.72rem; font-weight: 700; color: #57655a;
+    width: 1.5rem; height: 1.5rem; line-height: 1.5rem; text-align: center;
+    border: 1px solid #223026; border-radius: 50%;
+  }
+  .topic.hot .rank { color: #08210a; background: var(--kick-green); border-color: var(--kick-green); }
+  .topic .word { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: font-size 0.4s, color 0.4s; }
+  .topic.hot .word { color: var(--kick-green); text-shadow: 0 0 18px rgba(83, 252, 24, 0.35); }
+  .topic .bar-track { grid-column: 2; height: 100%; background: rgba(28, 38, 32, 0.9); border-radius: 4px; overflow: hidden; }
+  .topic .bar {
+    display: block; height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, #1f5c14, var(--kick-green) 85%, #b6ff8f);
+    box-shadow: 0 0 10px rgba(83, 252, 24, 0.35);
+    transition: width 0.5s ease;
+  }
+  #topics .empty { color: #414e44; font-size: 0.95rem; font-style: italic; }
+
+  /* ---- Toast (assistant callouts) ---- */
+  #toast {
+    position: absolute; top: 5%; left: 50%; transform: translate(-50%, -12px);
+    background: var(--glass); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-radius: 14px; padding: 0.85rem 1.5rem 0.85rem 1.2rem; font-size: 1.02rem;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+    opacity: 0; transition: opacity 0.3s, transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    pointer-events: none; max-width: 70vw; z-index: 4;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast b { color: var(--kick-green); }
+  #toast::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--kick-green); margin-right: 0.7rem; vertical-align: 2px;
+    box-shadow: 0 0 10px var(--kick-green);
+  }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%);
+    font-size: 0.8rem; color: #57655a; text-align: center; line-height: 1.6; z-index: 4;
+  }
+  #hud kbd { background: #1a231c; border: 1px solid #2c3a2f; border-radius: 4px; padding: 0 5px; color: #9db8a1; }
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div id="stage">
+  <div id="gauge-wrap">
+    <svg id="gauge" width="440" height="440" viewBox="0 0 440 440">
+      <g id="ticks"></g>
+      <path id="track" fill="none" stroke="rgba(28,38,32,0.95)" stroke-width="26" stroke-linecap="round"/>
+      <path id="arcGlow" fill="none" stroke="#5a6e75" stroke-width="26" stroke-linecap="round" opacity="0.5" style="filter: blur(13px)"/>
+      <path id="arc" fill="none" stroke="#5a6e75" stroke-width="26" stroke-linecap="round"/>
+      <circle id="peakDot" r="6" fill="#b6ff8f" opacity="0"/>
+    </svg>
+    <div class="center-text">
+      <div id="brand">Hype Score</div>
+      <div id="score">0<small>/100</small></div>
+      <div id="tier-label">warming up</div>
+      <div id="stats"><span id="velocity">0</span> msg/min</div>
+      <canvas id="spark" width="240" height="44"></canvas>
+    </div>
+  </div>
+
+  <div id="topics">
+    <div id="bignum" class="card">
+      <div class="label">💰 Biggest call from chat</div>
+      <div class="amount"></div>
+      <div class="who"></div>
+    </div>
+    <div id="topic-card" class="card">
+      <h3>Chat is talking about</h3>
+      <div id="topic-list"><div class="empty">listening to chat…</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="hud">
+  <kbd>H</kbd> raid &nbsp; <kbd>K</kbd> kicks gift &nbsp; <kbd>B</kbd> sub &nbsp; <kbd>S</kbd> spammer &nbsp;
+  <kbd>↑</kbd>/<kbd>↓</kbd> chat rate &nbsp; <kbd>Space</kbd> pause &nbsp; <kbd>T</kbd> topics &nbsp; <kbd>D</kbd> hide this
+</div>
+
+<script>
+'use strict';
+// ============================================================
+// URL flags (per ARCHITECTURE.md: fallbacks by URL param, not code change)
+//   ?transparent=1  transparent bg for OBS
+//   ?hud=0          hide hotkey help
+//   ?topics=0       hide topics panel
+//   ?rate=2.5       starting base chat rate (msgs/sec)
+// ============================================================
+const params = new URLSearchParams(location.search);
+if (params.get('transparent') === '1') document.body.classList.add('transparent');
+if (params.get('hud') === '0') document.getElementById('hud').style.display = 'none';
+if (params.get('topics') === '0') document.getElementById('topics').style.display = 'none';
+
+// ============================================================
+// L3 — Hype engine (see ARCHITECTURE.md §L3)
+// Decayed activity S, rolling baseline B, variance V → z-score → 0–100.
+// O(1) memory, O(1) per event.
+// ============================================================
+const HALF_LIFE = 10;          // seconds — decay of the activity signal
+const LAMBDA = Math.LN2 / HALF_LIFE;
+const TAU = 45;                // seconds — baseline EMA (short for demo timescale)
+const K_SQUASH = 2;            // z-score squash factor
+const KAPPA = 3;               // per-user saturation
+const WARMUP_S = 8;            // suppress output while baseline seeds
+const EPS = 1e-6;
+
+const WEIGHTS = { chat: 1.0, kicks: 0, sub: 10.0, follow: 2.0 }; // kicks computed from amount
+const BADGE_MULT = { subscriber: 1.5, og: 1.3, verified: 1.4, moderator: 1.2 };
+
+const engine = {
+  S: 0, tLast: now(),
+  B: 0, V: 0, tBase: now(), seeded: false,
+  userContrib: new Map(),      // username -> { c, t }  (decayed per-user contribution)
+  recentTexts: [],             // for novelty / anti-copypasta
+  startedAt: now(),
+
+  read(t) { return this.S * Math.exp(-LAMBDA * (t - this.tLast)); },
+
+  userFactor(user, t) {
+    const rec = this.userContrib.get(user) || { c: 0, t };
+    rec.c *= Math.exp(-LAMBDA * (t - rec.t));
+    rec.t = t;
+    this.userContrib.set(user, rec);
+    return 1 / (1 + rec.c / KAPPA);   // one keyboard-masher saturates and stops mattering
+  },
+
+  novelty(text) {
+    const key = text.toLowerCase().trim();
+    const dup = this.recentTexts.includes(key);
+    this.recentTexts.push(key);
+    if (this.recentTexts.length > 40) this.recentTexts.shift();
+    return dup ? 0.3 : 1.0;
+  },
+
+  // Returns the effective weight so downstream widgets (topics) inherit
+  // spam resistance for free.
+  ingest(ev) {
+    const t = now();
+    let w;
+    if (ev.type === 'chat') {
+      const badgeMult = Math.max(1, ...ev.badges.map(b => BADGE_MULT[b] || 1));
+      const emoteBonus = Math.min(1.5, 1 + 0.1 * (ev.emotes || 0));
+      w = WEIGHTS.chat * badgeMult * this.novelty(ev.text) * emoteBonus;
+    } else if (ev.type === 'kicks') {
+      w = 5.0 + 2 * Math.log10(1 + ev.amount);
+    } else {
+      w = WEIGHTS[ev.type] || 1;
+    }
+    w *= this.userFactor(ev.username, t);       // spam shield
+    this.S = this.read(t) + w;
+    this.tLast = t;
+    const rec = this.userContrib.get(ev.username);
+    rec.c += w;
+    return w;
+  },
+
+  // Sample at ~4 Hz: update baseline + variance, return hype 0–100.
+  sample() {
+    const t = now();
+    const sNow = this.read(t);
+    const dt = t - this.tBase;
+    this.tBase = t;
+
+    if (!this.seeded) {                          // warm-up: seed baseline from first samples
+      this.B = sNow;
+      if (t - this.startedAt > 2) this.seeded = true;
+      return null;
+    }
+    const alpha = 1 - Math.exp(-dt / TAU);
+    const d = sNow - this.B;
+    this.B += alpha * d;
+    this.V = alpha * d * d + (1 - alpha) * this.V;
+
+    if (t - this.startedAt < WARMUP_S) return null;
+    const z = (sNow - this.B) / (Math.sqrt(this.V) + EPS);
+    return 100 / (1 + Math.exp(-z / K_SQUASH));
+  },
+};
+
+function now() { return performance.now() / 1000; }
+
+// ============================================================
+// TopicTracker — SUB-FEATURE, designed as a drop-in module.
+// To integrate into the main overlay: copy this class, call
+// tracker.ingest(text, weight) per chat message and tracker.top(n)
+// whenever you render. No other dependencies.
+//
+// Same incremental-decay trick as the hype engine (O(1) per token),
+// and because it's fed the *effective* (spam-saturated) weight,
+// a spammer can't force a topic onto the board.
+// ============================================================
+class TopicTracker {
+  constructor({ halfLife = 40, minLen = 3 } = {}) {
+    this.lambda = Math.LN2 / halfLife;
+    this.minLen = minLen;
+    this.scores = new Map();   // token -> { s, t }
+    this.stop = new Set(('the and for you your this that with what who when how why not are was were his her its our they them just like really very much omg lol lmao wtf too can did does has have had get got him she all out now here there from into about dont cant wont isnt actually literally').split(' '));
+    // Money talk is the permanent background noise of a KICK chat — as a
+    // *topic* it's broad and boring, so it's excluded from the board. The
+    // interesting part (the amount) is captured by BigNumberTracker instead.
+    this.money = new Set(('money credits credit kicks cash bet bets betting gamba gamble gambling jackpot coins bucks dollars dollar rich broke payout winnings stake wager').split(' '));
+  }
+  ingest(text, weight = 1) {
+    const t = now();
+    const seen = new Set();
+    for (let token of text.toLowerCase().split(/[^a-z0-9']+/)) {
+      token = token.replace(/'s$/, '');
+      if (token.length < this.minLen || this.stop.has(token) || this.money.has(token) || seen.has(token)) continue;
+      if (/^\d+$/.test(token)) continue;          // bare numbers belong to BigNumberTracker
+      seen.add(token);                            // count each token once per message
+      const rec = this.scores.get(token) || { s: 0, t };
+      rec.s = rec.s * Math.exp(-this.lambda * (t - rec.t)) + weight;
+      rec.t = t;
+      this.scores.set(token, rec);
+    }
+    // bounded memory: evict decayed-out tokens occasionally
+    if (this.scores.size > 300) {
+      for (const [k, rec] of this.scores)
+        if (rec.s * Math.exp(-this.lambda * (t - rec.t)) < 0.05) this.scores.delete(k);
+    }
+  }
+  top(n = 6) {
+    const t = now();
+    return [...this.scores.entries()]
+      .map(([word, rec]) => ({ word, score: rec.s * Math.exp(-this.lambda * (t - rec.t)) }))
+      .filter(x => x.score > 0.4)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n);
+  }
+}
+const topics = new TopicTracker();
+
+// ============================================================
+// BigNumberTracker — SUB-FEATURE, drop-in like TopicTracker.
+// Money talk is broad; the engaging bit is the *biggest number*
+// chat is throwing around. Holds the largest amount mentioned
+// (or gifted) in the trailing window; a bigger call replaces it,
+// otherwise it expires. Integrate with track(text|amount, user).
+// ============================================================
+class BigNumberTracker {
+  constructor({ ttl = 45, min = 10 } = {}) {
+    this.ttl = ttl; this.min = min;
+    this.best = null;   // { amount, user, source, t }
+  }
+  track(ev) {
+    let amount = 0;
+    if (ev.type === 'kicks') amount = ev.amount;
+    else if (ev.type === 'chat') {
+      for (const m of ev.text.matchAll(/\b(\d[\d,]*)(k)?\b/gi)) {
+        let n = parseInt(m[1].replace(/,/g, ''), 10);
+        if (m[2]) n *= 1000;
+        amount = Math.max(amount, n);
+      }
+    }
+    if (amount < this.min) return false;
+    const t = now();
+    if (this.best && t - this.best.t < this.ttl && amount <= this.best.amount) return false;
+    this.best = { amount, user: ev.username, source: ev.type, t };
+    return true;        // new record — caller may celebrate
+  }
+  current() {
+    if (!this.best || now() - this.best.t > this.ttl) return null;
+    return this.best;
+  }
+}
+const bigNum = new BigNumberTracker();
+
+// ============================================================
+// L1 (mock) — Synthetic chat generator (not rendered; drives the
+// engine and topics). Event shape mirrors KICK webhook payloads
+// (chat.message.sent, kicks.gifted, channel.subscription.*).
+// ============================================================
+const USERS = ['clavfan99','xTedmeister','hypebeast_sam','gigagamer','LatinaLuvr','vegas_vibes','simon_says','pixelpwner','og_watcher','kween_kick','stream_sniper','taha_tv','moggedbymods','nightbotfan','freebandz','lurker_larry','WSPGamba','dice_dan','emote_emma','chatterboxx'];
+const BADGE_POOL = [[], [], [], ['subscriber'], ['subscriber'], ['og'], ['moderator'], ['verified']];
+const LINES = [
+  'LETS GOOO', 'clav you legend', 'W streamer', 'no way lmaooo', 'vegas baby!!',
+  'this casino is insane', 'DO IT DO IT', 'certified banger', 'chat is this real', 'KEKW',
+  'go to the poker tables', 'ask her about the buffet', 'clip that NOW',
+  'poker time lets go', 'the buffet at caesars is elite', 'blackjack blackjack blackjack',
+  'he actually did it', 'W rizz', 'vegas strip at night hits different', 'gamba time?',
+  'ez money', 'that dealer is savage', 'sheeesh', 'POG', 'put it all on red',
+  'crazy crazy crazy', 'hi from brazil', 'the fountain show starts soon', 'tip the dealer clav',
+  'put 50 on red', 'bet 200 on blackjack', 'drop 500 right now', 'do a 1k spin',
+  'i would put 2500 on that', 'all in 100 lets go', 'throw 750 at the roulette',
+];
+const EMOTE_ODDS = 0.4;
+
+let baseRate = parseFloat(params.get('rate')) || 1.2;   // msgs/sec
+let paused = false;
+
+function randomChat(username) {
+  const user = username || USERS[Math.floor(Math.random() * USERS.length)];
+  return {
+    type: 'chat',
+    username: user,
+    badges: BADGE_POOL[Math.floor(Math.random() * BADGE_POOL.length)],
+    text: LINES[Math.floor(Math.random() * LINES.length)],
+    emotes: Math.random() < EMOTE_ODDS ? 1 + Math.floor(Math.random() * 3) : 0,
+  };
+}
+
+// Poisson-ish scheduler: check at 50ms resolution
+setInterval(() => {
+  if (paused) return;
+  if (Math.random() < baseRate * 0.05) dispatch(randomChat());
+}, 50);
+
+// ---- Scripted moments (demo hotkeys) ----
+function raid() {
+  toast('<b>RAID INCOMING</b> — 25 viewers just crashed the party');
+  burst(90, '#53fc18');
+  for (let i = 0; i < 25; i++) {
+    setTimeout(() => {
+      const u = 'raider_' + i;
+      dispatch({ type: 'follow', username: u, badges: [] });
+      if (Math.random() < 0.8) dispatch({ ...randomChat(u), username: u });
+    }, Math.random() * 3500);
+  }
+}
+function kicksGift() {
+  const amount = [50, 100, 500][Math.floor(Math.random() * 3)];
+  const user = USERS[Math.floor(Math.random() * USERS.length)];
+  dispatch({ type: 'kicks', username: user, badges: [], amount });
+  toast(`<b>${user}</b> gifted <b>${amount} Kicks</b> — real money, real hype`);
+  burst(60, '#ffd24d');
+}
+function sub() {
+  const user = USERS[Math.floor(Math.random() * USERS.length)];
+  dispatch({ type: 'sub', username: user, badges: ['subscriber'] });
+  toast(`<b>${user}</b> just subscribed ⭐`);
+  burst(40, '#53fc18');
+}
+function spammer() {
+  toast('<b>Spam shield:</b> one user hammering "JACKPOT" — watch the meter <i>and</i> the topics ignore it');
+  let n = 0;
+  const id = setInterval(() => {
+    if (++n > 30) return clearInterval(id);
+    dispatch({ type: 'chat', username: 'xX_spambot_Xx', badges: [], text: 'JACKPOT JACKPOT JACKPOT', emotes: 0 });
+  }, 200);
+}
+
+// ============================================================
+// Dispatch: engine + topics + velocity tracking
+// ============================================================
+const velTracker = [];
+function dispatch(ev) {
+  const w = engine.ingest(ev);                 // effective, spam-saturated weight
+  if (ev.type === 'chat') topics.ingest(ev.text, w);
+  // spam-saturated messages (w≈0) can't set a new record
+  if (w > 0.2 && bigNum.track(ev)) flashBigNum();
+  velTracker.push(now());
+}
+
+let toastTimer;
+function toast(html) {
+  const el = document.getElementById('toast');
+  el.innerHTML = html;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// ============================================================
+// L6 — Render. Meter interpolates toward target (never snaps).
+// Single rAF loop for gauge + particles + sparkline; topics at 1 Hz.
+// ============================================================
+const ARC_START = 135, ARC_SWEEP = 270, R = 185, CX = 220, CY = 220;
+function polar(angleDeg, r = R) {
+  const a = (angleDeg - 90) * Math.PI / 180;
+  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+}
+function arcPath(fromDeg, toDeg) {
+  const [x1, y1] = polar(fromDeg), [x2, y2] = polar(toDeg);
+  const large = toDeg - fromDeg > 180 ? 1 : 0;
+  return `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`;
+}
+document.getElementById('track').setAttribute('d', arcPath(ARC_START, ARC_START + ARC_SWEEP));
+
+// Tick marks every 10 points, longer every 50.
+const ticksEl = document.getElementById('ticks');
+for (let v = 0; v <= 100; v += 10) {
+  const deg = ARC_START + ARC_SWEEP * (v / 100);
+  const major = v % 50 === 0;
+  const [x1, y1] = polar(deg, R - 24);
+  const [x2, y2] = polar(deg, R - (major ? 38 : 32));
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+  line.setAttribute('stroke', major ? '#3a4a3e' : '#26332a');
+  line.setAttribute('stroke-width', major ? 3 : 2);
+  line.setAttribute('stroke-linecap', 'round');
+  ticksEl.appendChild(line);
+}
+
+const TIERS = [
+  { min: 0,  label: 'COLD' },
+  { min: 30, label: 'WARMING' },
+  { min: 70, label: 'ON FIRE' },
+];
+
+// Colour bands: the gauge blends between these as the score approaches
+// each engagement band, so the band is readable from colour alone.
+const BAND_COLORS = [
+  { v: 0,   c: [ 90, 110, 117] },   // cold — steel grey-blue
+  { v: 35,  c: [255, 176,  32] },   // warming — amber
+  { v: 70,  c: [ 83, 252,  24] },   // on fire — kick green
+  { v: 100, c: [182, 255, 143] },   // peak — white-hot green
+];
+function bandColor(v) {
+  let lo = BAND_COLORS[0], hi = BAND_COLORS[BAND_COLORS.length - 1];
+  for (let j = 0; j < BAND_COLORS.length - 1; j++) {
+    if (v >= BAND_COLORS[j].v && v <= BAND_COLORS[j + 1].v) { lo = BAND_COLORS[j]; hi = BAND_COLORS[j + 1]; break; }
+  }
+  const f = (v - lo.v) / (hi.v - lo.v || 1);
+  const c = lo.c.map((a, j) => Math.round(a + (hi.c[j] - a) * f));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
+let target = 0, displayed = 0;
+const hist = [];                                 // [{t, v}] for the sparkline
+setInterval(() => {
+  const h = engine.sample();
+  if (h !== null) target = h;
+  hist.push({ t: now(), v: target });
+  while (hist.length && hist[0].t < now() - 60) hist.shift();
+}, 250);
+
+// ---- Session-peak marker: a dot parked at the highest score reached ----
+let peak = 0;
+const peakDotEl = document.getElementById('peakDot');
+
+// ---- Particle embers: cheap canvas, additive blending ----
+const fx = document.getElementById('fx');
+const fctx = fx.getContext('2d');
+function sizeFx() { fx.width = innerWidth; fx.height = innerHeight; }
+sizeFx();
+addEventListener('resize', sizeFx);
+const particles = [];
+function gaugeCenter() {
+  const r = document.getElementById('gauge').getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height / 2];
+}
+function spawn(x, y, color, speed) {
+  if (particles.length > 220) return;
+  const a = Math.random() * Math.PI * 2;
+  particles.push({
+    x, y,
+    vx: Math.cos(a) * speed * (0.4 + Math.random()),
+    vy: Math.sin(a) * speed * (0.4 + Math.random()) - 40, // drift upward
+    life: 1, decay: 0.5 + Math.random() * 0.7,
+    size: 1.5 + Math.random() * 2.5, color,
+  });
+}
+function burst(n, color) {
+  // Celebrate around the gauge RING, not over the numeral.
+  const rect = document.getElementById('gauge').getBoundingClientRect();
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+  const rad = (rect.width / 440) * R;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    spawn(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, color, 90);
+  }
+}
+function stepParticles(dt) {
+  fctx.clearRect(0, 0, fx.width, fx.height);
+  fctx.globalCompositeOperation = 'lighter';
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= p.decay * dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vy -= 25 * dt;                              // embers accelerate upward
+    fctx.globalAlpha = Math.max(0, p.life) * 0.85;
+    fctx.fillStyle = p.color;
+    fctx.beginPath();
+    fctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    fctx.fill();
+  }
+  fctx.globalAlpha = 1;
+  fctx.globalCompositeOperation = 'source-over';
+}
+
+// ---- Sparkline: hype over the trailing 60s ----
+const spark = document.getElementById('spark');
+const sctx = spark.getContext('2d');
+function drawSpark(color) {
+  const W = spark.width, H = spark.height;
+  sctx.clearRect(0, 0, W, H);
+  if (hist.length < 2) return;
+  const t0 = now() - 60;
+  sctx.beginPath();
+  hist.forEach((p, i) => {
+    const x = ((p.t - t0) / 60) * W;
+    const y = H - 3 - (p.v / 100) * (H - 6);
+    i === 0 ? sctx.moveTo(x, y) : sctx.lineTo(x, y);
+  });
+  sctx.strokeStyle = color;
+  sctx.globalAlpha = 0.9;
+  sctx.lineWidth = 2;
+  sctx.lineJoin = 'round';
+  sctx.stroke();
+  // soft area fill under the line
+  const last = hist[hist.length - 1];
+  sctx.lineTo(((last.t - t0) / 60) * W, H);
+  sctx.lineTo(((hist[0].t - t0) / 60) * W, H);
+  sctx.closePath();
+  sctx.globalAlpha = 0.12;
+  sctx.fillStyle = color;
+  sctx.fill();
+  sctx.globalAlpha = 1;
+}
+
+const arcEl = document.getElementById('arc');
+const arcGlowEl = document.getElementById('arcGlow');
+const scoreEl = document.getElementById('score');
+const tierEl = document.getElementById('tier-label');
+const wrapEl = document.getElementById('gauge-wrap');
+const velEl = document.getElementById('velocity');
+
+let tPrev = now();
+function frame() {
+  const t = now();
+  const dt = Math.min(0.1, t - tPrev);
+  tPrev = t;
+
+  displayed += (target - displayed) * 0.06;            // smooth reads as "live"
+  const deg = ARC_START + ARC_SWEEP * (displayed / 100);
+  const d = displayed < 0.5 ? '' : arcPath(ARC_START, deg);
+  arcEl.setAttribute('d', d);
+  arcGlowEl.setAttribute('d', d);
+  scoreEl.innerHTML = `${Math.round(displayed)}<small>/100</small>`;
+
+  const col = bandColor(displayed);
+  arcEl.setAttribute('stroke', col);
+  arcGlowEl.setAttribute('stroke', col);
+  arcGlowEl.setAttribute('opacity', 0.25 + 0.45 * (displayed / 100));
+  scoreEl.style.color = col;
+  scoreEl.style.textShadow = displayed >= 30 ? `0 0 ${Math.round(displayed / 3)}px ${col}` : 'none';
+
+  // session peak marker
+  if (displayed > peak) peak = displayed;
+  if (peak > 1) {
+    const [px, py] = polar(ARC_START + ARC_SWEEP * (peak / 100));
+    peakDotEl.setAttribute('cx', px);
+    peakDotEl.setAttribute('cy', py);
+    peakDotEl.setAttribute('opacity', 0.9);
+  }
+
+  const tier = TIERS.filter(x => displayed >= x.min).pop();
+  tierEl.textContent = tier.label;
+  tierEl.style.color = col;
+  wrapEl.classList.toggle('tier2', displayed >= 70);
+
+  // embers rise off the gauge while ON FIRE
+  if (displayed >= 70 && Math.random() < (displayed - 65) / 60) {
+    const [cx, cy] = gaugeCenter();
+    const a = ARC_START + Math.random() * ARC_SWEEP * (displayed / 100);
+    const [ox, oy] = polar(a);
+    spawn(cx + (ox - CX), cy + (oy - CY), col, 30);
+  }
+  stepParticles(dt);
+  drawSpark(col);
+
+  // chat velocity over trailing 15s → msgs/min
+  const cutoff = now() - 15;
+  while (velTracker.length && velTracker[0] < cutoff) velTracker.shift();
+  velEl.textContent = Math.round(velTracker.length * 4);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---- Biggest-number card (with count-up tween on new records) ----
+const bigNumEl = document.getElementById('bignum');
+const amountEl = bigNumEl.querySelector('.amount');
+let bigNumFlash, shownAmount = 0, tweenId, settleId, tweenTarget = null;
+function flashBigNum() {
+  bigNumEl.classList.add('fresh');
+  clearTimeout(bigNumFlash);
+  bigNumFlash = setTimeout(() => bigNumEl.classList.remove('fresh'), 2000);
+  burst(35, '#b6ff8f');
+}
+function tweenAmount(to) {
+  if (to === tweenTarget) return;   // already animating there — don't restart
+  tweenTarget = to;
+  cancelAnimationFrame(tweenId);
+  // Settle guard: whatever happens to the animation frames, the final
+  // value lands (rAF can stall in background/headless contexts).
+  clearTimeout(settleId);
+  settleId = setTimeout(() => { shownAmount = to; amountEl.textContent = to.toLocaleString(); }, 750);
+  const from = shownAmount, t0 = performance.now(), dur = 600;
+  (function tick(tNow) {
+    // Clamp both ends: rAF timestamps can lag performance.now() (notably
+    // under virtual time), and an unclamped negative f explodes the ease.
+    const f = Math.min(1, Math.max(0, (tNow - t0) / dur));
+    const eased = 1 - Math.pow(1 - f, 3);
+    shownAmount = Math.round(from + (to - from) * eased);
+    amountEl.textContent = shownAmount.toLocaleString();
+    if (f < 1) tweenId = requestAnimationFrame(tick);
+  })(t0);
+}
+setInterval(() => {
+  const best = bigNum.current();
+  bigNumEl.classList.toggle('on', !!best);
+  if (!best) { shownAmount = 0; tweenTarget = null; return; }
+  if (best.amount !== shownAmount) tweenAmount(best.amount);
+  bigNumEl.querySelector('.who').innerHTML =
+    best.source === 'kicks' ? `<b>${best.user}</b> gifted it in Kicks 🎁` : `called by <b>${best.user}</b>`;
+}, 500);
+
+// ---- Topics panel: top 6 tokens, rank chips + bars scaled to share ----
+const topicList = document.getElementById('topic-list');
+setInterval(() => {
+  const top = topics.top(6);
+  if (!top.length) {
+    topicList.innerHTML = '<div class="empty">listening to chat…</div>';
+    return;
+  }
+  const max = top[0].score;
+  topicList.innerHTML = top.map(({ word, score }, i) => {
+    const share = score / max;
+    const size = (1 + share * 0.55).toFixed(2);
+    return `<div class="topic on ${i === 0 ? 'hot' : ''}">
+      <span class="rank">${i + 1}</span>
+      <span class="word" style="font-size:${size}rem">${word}</span>
+      <span class="bar-track"><span class="bar" style="width:${Math.round(share * 100)}%"></span></span>
+    </div>`;
+  }).join('');
+}, 1000);
+
+// ============================================================
+// Hotkeys — demo insurance (stage-proof per ARCHITECTURE.md §L4 fallback 3)
+// ============================================================
+document.addEventListener('keydown', (e) => {
+  switch (e.key.toLowerCase()) {
+    case 'h': raid(); break;
+    case 'k': kicksGift(); break;
+    case 'b': sub(); break;
+    case 's': spammer(); break;
+    case 'arrowup': baseRate = Math.min(20, baseRate * 1.6); toast(`chat rate → ${baseRate.toFixed(1)} msg/s`); e.preventDefault(); break;
+    case 'arrowdown': baseRate = Math.max(0.1, baseRate / 1.6); toast(`chat rate → ${baseRate.toFixed(1)} msg/s`); e.preventDefault(); break;
+    case ' ': paused = !paused; toast(paused ? 'chat paused' : 'chat resumed'); e.preventDefault(); break;
+    case 't': { const el = document.getElementById('topics'); el.style.display = el.style.display === 'none' ? '' : 'none'; break; }
+    case 'd': { const h = document.getElementById('hud'); h.style.display = h.style.display === 'none' ? '' : 'none'; break; }
+  }
+});
+</script>
+</body>
+</html>
