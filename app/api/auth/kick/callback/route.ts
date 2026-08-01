@@ -20,6 +20,7 @@ import {
   SESSION_COOKIE,
   statelessKickMode,
 } from "@/lib/session";
+import { kickChatSummaryWorkflow } from "@/workflows/kick-chat-summary";
 import { kickSuggestionWorkflow } from "@/workflows/kick-suggestions";
 
 export const runtime = "nodejs";
@@ -65,6 +66,7 @@ export async function GET(request: Request): Promise<Response> {
     const connection = await upsertKickConnection({ channel, profile, subscriptionIds, token });
     const session = await createAppSession(connection.id);
     await start(kickSuggestionWorkflow, [connection.id, connection.workflow_generation]);
+    await start(kickChatSummaryWorkflow, [connection.id, connection.workflow_generation]);
 
     return authenticatedRedirect(session);
   } catch (error) {
