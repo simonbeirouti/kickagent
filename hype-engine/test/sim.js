@@ -10,11 +10,13 @@
  *   4. a suggestion fires during the lull (ideally pivoting to "food")
  *   5. tracked Hit Me, Kick Me round during the burst measures "up"
  *   6. scale invariance: same relative burst → similar hype at 1 and 40 msg/s
+ *   7. a trending-gap suggestion fires, naming a topic absent from chat
  */
 
 import { HypeEngine } from '../src/engine.js';
 import { TopicTracker } from '../src/topics.js';
 import { KickAssistant } from '../src/assistant.js';
+import { TrendingTopics } from '../src/trending.js';
 import { createScriptedReplay, synthetic } from '../src/mock.js';
 
 let failures = 0;
@@ -26,7 +28,7 @@ function check(name, cond, detail = '') {
 function run(events, { sampleMs = 1000, hooks = {} } = {}) {
   const engine = new HypeEngine();
   const topicsT = new TopicTracker();
-  const assistant = new KickAssistant(engine, topicsT);
+  const assistant = new KickAssistant(engine, topicsT, { trending: new TrendingTopics() });
   const out = { samples: [], suggestions: [], impacts: [], ready: null };
 
   assistant.on('ready', (p) => (out.ready = p));
@@ -64,7 +66,8 @@ const meanHype = (samples, t0, t1) => {
 // ---------- scripted replay ----------
 console.log('=== Scripted replay (~4.5 min stream) ===');
 let trackedAt = null;
-const r = run(createScriptedReplay(), {
+const replayEvents = createScriptedReplay();
+const r = run(replayEvents, {
   hooks: {
     onSample(now, state, assistant) {
       // The Hit Me, Kick Me moment: dare starts at the burst.
@@ -93,14 +96,26 @@ check('3b. spam flood does not spike hype', spamMean <= rampPeak, `spam mean ${M
 const falsePositives = [...new Set(r.engine.flaggedUsers.map((f) => f.userId))].filter((id) => id !== 'xX_botlord_Xx');
 check('3c. no legitimate user gets flagged', falsePositives.length === 0, falsePositives.length ? `false flags: ${falsePositives.join(', ')}` : 'clean');
 
-const lullSuggestion = r.suggestions.find((s) => s.ts >= 120_000 && s.ts <= 175_000);
-check('4. suggestion fires during the lull', !!lullSuggestion, lullSuggestion ? `"${lullSuggestion.text}"` : 'none fired');
+const lullSuggestion = r.suggestions.find((s) => s.kind === 'pivot' && s.ts >= 120_000 && s.ts <= 175_000);
+check('4. pivot suggestion fires during the lull', !!lullSuggestion, lullSuggestion ? `"${lullSuggestion.text}"` : 'none fired');
 
 const impact = r.impacts.find((i) => i.id === trackedAt);
 check('5. Hit Me, Kick Me measured as hype UP', impact?.verdict === 'up', impact ? `Δ${impact.delta} (${impact.preHype}→${impact.postHype})` : 'no impact event');
 
 const topicsDuringRamp = r.samples.find((s) => s.now === 90_000)?.topTopics.map((t) => t.topic) || [];
 check('6. "poker" is a top topic during ramp', topicsDuringRamp.includes('poker'), `top: ${topicsDuringRamp.join(', ')}`);
+
+const trendingSug = r.suggestions.find((s) => s.kind === 'trending');
+check('7a. trending-gap suggestion fires', !!trendingSug, trendingSug ? `"${trendingSug.text}"` : 'none fired');
+const mentionedInChat =
+  trendingSug &&
+  replayEvents.some((e) => (e.text || '').toLowerCase().includes(trendingSug.topic));
+check(
+  '7b. suggested trending topic is genuinely absent from chat',
+  !!trendingSug && !mentionedInChat,
+  trendingSug ? `topic: ${trendingSug.topic}` : ''
+);
+check('7c. trending never fires during warm-up', r.suggestions.every((s) => s.kind !== 'trending' || s.ts > 50_000));
 
 // ---------- scale invariance ----------
 console.log('\n=== Scale invariance (same 5× burst at both scales) ===');
@@ -109,9 +124,9 @@ const large = run(synthetic({ rate: 40, seconds: 180, users: 500, burst: { atMs:
 const peakSmall = Math.max(...small.samples.filter((s) => s.now >= 120_000 && s.now <= 145_000).map((s) => s.hype));
 const peakLarge = Math.max(...large.samples.filter((s) => s.now >= 120_000 && s.now <= 145_000).map((s) => s.hype));
 console.log(`peak hype — 1 msg/s channel: ${peakSmall}   40 msg/s channel: ${peakLarge}`);
-check('7a. small channel burst registers', peakSmall >= 75);
-check('7b. large channel burst registers', peakLarge >= 75);
-check('7c. scales agree within 20 points', Math.abs(peakSmall - peakLarge) <= 20);
+check('8a. small channel burst registers', peakSmall >= 75);
+check('8b. large channel burst registers', peakLarge >= 75);
+check('8c. scales agree within 20 points', Math.abs(peakSmall - peakLarge) <= 20);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(failures ? 1 : 0);

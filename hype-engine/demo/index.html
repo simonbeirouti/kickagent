@@ -68,6 +68,8 @@
   .toast { border: 1px solid var(--green); background: rgba(83,252,24,.07); border-radius: 10px; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; font-size: 0.9rem; }
   .toast .when { color: var(--muted); font-size: 0.72rem; margin-top: 0.25rem; }
   .toast.flag { border-color: var(--red); background: rgba(255,77,77,.07); }
+  .toast.trending { border-color: var(--amber); background: rgba(255,176,32,.07); }
+  .toast.trending b { color: var(--amber); }
   .toast.impact-up { border-color: var(--green); }
   .toast.impact-flat { border-color: var(--amber); background: rgba(255,176,32,.07); }
   .toast.impact-down { border-color: var(--red); background: rgba(255,77,77,.07); }
@@ -126,6 +128,7 @@
 import { HypeEngine } from '../src/engine.js';
 import { TopicTracker } from '../src/topics.js';
 import { KickAssistant } from '../src/assistant.js';
+import { TrendingTopics } from '../src/trending.js';
 import { createScriptedReplay } from '../src/mock.js';
 
 const $ = (id) => document.getElementById(id);
@@ -144,7 +147,7 @@ function toast(cls, html, when) {
 function boot() {
   engine = new HypeEngine();
   topics = new TopicTracker();
-  assistant = new KickAssistant(engine, topics);
+  assistant = new KickAssistant(engine, topics, { trending: new TrendingTopics() });
   events = createScriptedReplay();
   ei = 0; simNow = 0; displayHype = 0; targetState = null; lastSampleAt = -1000;
   $('chat').innerHTML = ''; $('assist').innerHTML = '';
@@ -155,7 +158,9 @@ function boot() {
     $('readyBadge').textContent = 'BASELINE LOCKED — HIT ME, KICK ME OPEN';
     toast('', `<b>Baseline locked.</b> "Hit Me, Kick Me" can open.`, p.ts);
   });
-  assistant.on('suggestion', (p) => toast('', `<b>Suggestion:</b> ${p.text}`, p.ts));
+  assistant.on('suggestion', (p) => p.kind === 'trending'
+    ? toast('trending', `<b>Trending gap:</b> ${p.text}`, p.ts)
+    : toast('', `<b>Suggestion:</b> ${p.text}`, p.ts));
   assistant.on('impact', (p) => {
     const label = { up: 'HYPE UP', flat: 'FLAT', down: 'HYPE DOWN' }[p.verdict];
     toast(`impact-${p.verdict}`, `<b>Hit Me, Kick Me result — ${label}</b> · "${p.label}" moved hype ${p.preHype}→${p.postHype} (Δ${p.delta >= 0 ? '+' : ''}${p.delta})`, p.ts);

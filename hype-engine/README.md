@@ -7,7 +7,7 @@ the overlay, **Hit Me, Kick Me**, and glasses features build on.
 ## Run it
 
 ```bash
-npm test    # simulation harness: 10 behaviour checks against the scripted replay
+npm test    # simulation harness: 14 behaviour checks against the scripted replay
 npm run demo    # serves the live dashboard at http://localhost:8420/demo/
 ```
 
@@ -17,10 +17,11 @@ npm run demo    # serves the live dashboard at http://localhost:8420/demo/
 |---|---|
 | `src/engine.js` | **Hype Score 0–100.** Exponentially-decayed activity vs a rolling baseline → z-score → sigmoid. Self-calibrating: "unusually busy for *this* channel, right now" — behaves identically at 200 and 50,000 viewers. Per-user saturation gives spam resistance and flags spammers. O(1) memory and O(1) per event. |
 | `src/topics.js` | **What chat is hyped about.** Per-term fast (20s) + slow (90s) decayed scores; their ratio gives per-topic momentum (rising/steady/falling). A topic needs multiple distinct users — one enthusiast or spammer can't push one. |
-| `src/assistant.js` | **Decision layer.** Emits `ready` when the baseline locks (the signal for **Hit Me, Kick Me** to open), `suggestion` when hype is low & falling (proposes a rising pivot topic), and `impact` after a tracked **Hit Me, Kick Me** round (hype up/flat/down verdict). |
+| `src/assistant.js` | **Decision layer.** Emits `ready` when the baseline locks (the signal for **Hit Me, Kick Me** to open), `suggestion` when hype is low & falling (`kind: 'pivot'` — a rising pivot topic) or when a platform-trending topic is missing from chat (`kind: 'trending'`), and `impact` after a tracked **Hit Me, Kick Me** round (hype up/flat/down verdict). |
+| `src/trending.js` | **Mocked platform trending source.** Ordered list of KICK-wide trending keywords (stands in for the real categories/trending API). The assistant diffs it against chat's live topics and suggests the gaps to pull new viewers in. |
 | `src/mock.js` | Scripted ~4.5-min replay (warm-up → ramp → spam attack → lull → bet burst → cooldown) mirroring real KICK webhook payload fields, plus a synthetic generator for scale testing. Deterministic PRNG: identical every run — stage insurance. |
 | `demo/index.html` | Live dashboard: hype meter, hot-topics leaderboard, chat feed, assistant feed. Buttons to inject a hype burst, inject a spammer, and run a **Hit Me, Kick Me** impact measurement. |
-| `test/sim.js` | Behaviour checks: baseline locks, ramp registers, spam is flagged & doesn't spike the score, suggestion fires in the lull, **Hit Me, Kick Me** measures "up", "poker" tops topics, and the same relative burst scores similarly at 1 and 40 msg/s. |
+| `test/sim.js` | Behaviour checks: baseline locks, ramp registers, spam is flagged & doesn't spike the score, suggestion fires in the lull, **Hit Me, Kick Me** measures "up", "poker" tops topics, a trending-gap suggestion names a topic absent from chat, and the same relative burst scores similarly at 1 and 40 msg/s. |
 
 ## Wiring it up (for the overlay / Hit Me, Kick Me people)
 
@@ -28,10 +29,11 @@ npm run demo    # serves the live dashboard at http://localhost:8420/demo/
 import { HypeEngine } from './src/engine.js';
 import { TopicTracker } from './src/topics.js';
 import { KickAssistant } from './src/assistant.js';
+import { TrendingTopics } from './src/trending.js';
 
 const engine = new HypeEngine();
 const topics = new TopicTracker();
-const assistant = new KickAssistant(engine, topics);
+const assistant = new KickAssistant(engine, topics, { trending: new TrendingTopics() });
 
 // 1. Feed events (from webhooks, replay, or anything shaped like one):
 const w = engine.ingest(event);                    // returns effective weight
@@ -43,7 +45,7 @@ assistant.onSample(state, Date.now());
 
 // 3. Subscribe:
 assistant.on('ready',      (p) => openBetting(p));         // baseline locked
-assistant.on('suggestion', (p) => showToStreamer(p.text)); // pivot topic
+assistant.on('suggestion', (p) => showToStreamer(p.text)); // p.kind: 'pivot' | 'trending'
 assistant.on('impact',     (p) => resolveBet(p.verdict));  // 'up'|'flat'|'down'
 
 // 4. When the streamer starts a Hit Me, Kick Me round:

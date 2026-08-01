@@ -5,11 +5,14 @@
  *   1. Announce when the baseline is locked (`ready`) — the signal for the
  *      "Hit Me, Kick Me" feature to open betting.
  *   2. Suggest a pivot topic for chat when hype is low and falling.
- *   3. Measure the hype impact of a streamer action (bet resolution support):
+ *   3. Spot trending gaps: topics hot on KICK platform-wide (TrendingTopics)
+ *      that chat isn't discussing — suggest introducing them when engagement
+ *      needs a lift.
+ *   4. Measure the hype impact of a streamer action (bet resolution support):
  *      snapshot hype before, average it after, verdict up/flat/down.
  *
- * Pure consumer of engine + topics. No DOM, no network — the overlay person
- * subscribes to `on(event, fn)` and renders.
+ * Pure consumer of engine + topics (+ an optional trending source). No DOM,
+ * no network — the overlay person subscribes to `on(event, fn)` and renders.
  */
 
 const DEFAULTS = {
@@ -18,6 +21,12 @@ const DEFAULTS = {
   fallingSamplesNeeded: 4, // consecutive falling samples before we speak up
   impactWindowMs: 15_000,  // how long after an action we measure
   impactUpDelta: 8,        // hype points that count as "it worked"
+  trendingBelow: 50,       // only suggest trending gaps when engagement needs a lift
+  trendingCooldownMs: 60_000,
+  trendingGapMs: 20_000,   // min spacing after ANY suggestion — never drown out pivots
+  trendingGraceMs: 10_000, // don't fire right as the baseline locks (warm-up tail)
+  trendingCoveredScore: 0.5, // topic score above this counts as "chat is on it"
+  trendingTopN: 8,         // ...or appearing in the top-N topics
 };
 
 const CANNED_PROMPTS = [
@@ -31,12 +40,16 @@ export class KickAssistant {
   constructor(engine, topics, opts = {}) {
     this.engine = engine;
     this.topics = topics;
-    this.o = { ...DEFAULTS, ...opts };
+    const { trending = null, ...rest } = opts;
+    this.trending = trending; // optional TrendingTopics instance
+    this.o = { ...DEFAULTS, ...rest };
 
     this.listeners = new Map(); // event -> [fn]
     this.announcedReady = false;
+    this.readyAt = null;
     this.fallingStreak = 0;
     this.lastSuggestionTs = -Infinity;
+    this.lastTrendingTs = -Infinity;
     this.pendingImpacts = []; // { id, label, startTs, preHype }
     this.recentHype = [];     // small buffer for pre/post averaging
     this.nextImpactId = 1;
@@ -61,6 +74,7 @@ export class KickAssistant {
     // 1. Baseline locked → Hit Me, Kick Me can open.
     if (state.ready && !this.announcedReady) {
       this.announcedReady = true;
+      this.readyAt = now;
       this.emit('ready', {
         ts: now,
         message: 'Baseline locked — Hit Me, Kick Me can open',
@@ -79,6 +93,31 @@ export class KickAssistant {
         this.lastSuggestionTs = now;
         this.fallingStreak = 0;
         this.emit('suggestion', this.buildSuggestion(now, state));
+      }
+    }
+
+    // 2b. Trending gaps: a topic hot platform-wide that chat hasn't touched.
+    // Coordinated with pivots: never within trendingGapMs of any suggestion,
+    // never during warm-up, and only when engagement actually needs a lift.
+    if (state.ready && this.trending) {
+      const needsLift = state.hype < this.o.trendingBelow || state.trend === 'falling';
+      const due =
+        needsLift &&
+        now - this.readyAt > this.o.trendingGraceMs &&
+        now - this.lastTrendingTs > this.o.trendingCooldownMs &&
+        now - this.lastSuggestionTs > this.o.trendingGapMs;
+      if (due) {
+        const topic = this.trendingGap(now);
+        if (topic) {
+          this.lastTrendingTs = now;
+          this.emit('suggestion', {
+            ts: now,
+            kind: 'trending',
+            hype: state.hype,
+            topic,
+            text: `'${topic}' is trending on KICK but your chat hasn't touched it — bring it up to pull new viewers in`,
+          });
+        }
       }
     }
 
@@ -105,10 +144,27 @@ export class KickAssistant {
       : CANNED_PROMPTS[2 + Math.floor(Math.random() * 2)];
     return {
       ts: now,
+      kind: 'pivot',
       hype: state.hype,
       topic: pivot ? pivot.topic : null,
       text: template(pivot ? pivot.topic : undefined),
     };
+  }
+
+  /**
+   * First trending topic (hottest-first order) that chat is NOT covering.
+   * "Covered" = in the current top-N topics, or fast score above a small
+   * threshold. Case-insensitive. Returns null when chat is on the pulse.
+   */
+  trendingGap(now) {
+    const covered = new Set(this.topics.top(this.o.trendingTopN, now).map((t) => t.topic));
+    for (const raw of this.trending.list(now)) {
+      const topic = raw.toLowerCase();
+      if (covered.has(topic)) continue;
+      if (this.topics.score(topic, now) > this.o.trendingCoveredScore) continue;
+      return topic;
+    }
+    return null;
   }
 
   /**

@@ -93,6 +93,13 @@ export class TopicTracker {
     }
   }
 
+  /** Current fast (decayed) score for a single term, 0 if unknown. */
+  score(term, now) {
+    const t = this.terms.get(term.toLowerCase());
+    if (!t) return 0;
+    return HypeEngine.decay(t.fast, now - t.tLast, this.o.halfFastMs);
+  }
+
   /**
    * Top topics right now: [{ topic, score, trend, mentions }].
    * `score` is the fast decayed value; `trend` is rising | steady | falling.
