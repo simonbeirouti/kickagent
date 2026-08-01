@@ -11,12 +11,14 @@
  *   5. tracked Hit Me, Kick Me round during the burst measures "up"
  *   6. scale invariance: same relative burst → similar hype at 1 and 40 msg/s
  *   7. a trending-gap suggestion fires, naming a topic absent from chat
+ *   8. highlights: clip markers captured in ramp + burst, none from spam
  */
 
 import { HypeEngine } from '../src/engine.js';
 import { TopicTracker } from '../src/topics.js';
 import { KickAssistant } from '../src/assistant.js';
 import { TrendingTopics } from '../src/trending.js';
+import { HighlightTracker } from '../src/highlights.js';
 import { createScriptedReplay, synthetic } from '../src/mock.js';
 
 let failures = 0;
@@ -29,6 +31,7 @@ function run(events, { sampleMs = 1000, hooks = {} } = {}) {
   const engine = new HypeEngine();
   const topicsT = new TopicTracker();
   const assistant = new KickAssistant(engine, topicsT, { trending: new TrendingTopics() });
+  const highlightsT = new HighlightTracker({ topics: topicsT });
   const out = { samples: [], suggestions: [], impacts: [], ready: null };
 
   assistant.on('ready', (p) => (out.ready = p));
@@ -43,14 +46,17 @@ function run(events, { sampleMs = 1000, hooks = {} } = {}) {
       const w = engine.ingest(ev);
       // Flagged spammers can inflate neither the score nor the topics.
       if (!engine.isFlagged(ev.userId)) topicsT.ingest(ev, w);
+      highlightsT.onEvent(ev, w);
     }
     const s = engine.sample(now);
     assistant.onSample(s, now);
+    highlightsT.onSample(s, now);
     out.samples.push({ now, ...s, topTopics: topicsT.top(3, now) });
     hooks.onSample?.(now, s, assistant);
   }
   out.engine = engine;
   out.topics = topicsT;
+  out.highlights = highlightsT.reel();
   return out;
 }
 
@@ -117,6 +123,20 @@ check(
 );
 check('7c. trending never fires during warm-up', r.suggestions.every((s) => s.kind !== 'trending' || s.ts > 50_000));
 
+const fmtHl = (h) => `${Math.round(h.startTs / 1000)}s–${Math.round(h.endTs / 1000)}s peak ${h.peakHype} "${h.headline}"`;
+console.log('highlights: ' + (r.highlights.map(fmtHl).join(' | ') || 'none'));
+const rampHl = r.highlights.find((h) => h.crossTs >= 50_000 && h.crossTs < 100_000);
+check('8a. highlight captured during ramp', !!rampHl, rampHl ? fmtHl(rampHl) : 'none');
+const burstHl = r.highlights.find((h) => h.crossTs >= 170_000 && h.crossTs < 220_000);
+check('8b. highlight captured during bet burst', !!burstHl, burstHl ? fmtHl(burstHl) : 'none');
+check(
+  '8c. highlight windows are sensible',
+  r.highlights.every((h) => h.startTs < h.peakTs && h.peakTs < h.endTs && h.peakHype >= 75),
+  r.highlights.map((h) => `${h.startTs}<${h.peakTs}<${h.endTs} peak ${h.peakHype}`).join(' | ')
+);
+const spamHl = r.highlights.find((h) => h.crossTs >= 100_000 && h.crossTs < 120_000);
+check('8d. spam attack does not trigger a highlight', !spamHl, spamHl ? fmtHl(spamHl) : 'clean');
+
 // ---------- scale invariance ----------
 console.log('\n=== Scale invariance (same 5× burst at both scales) ===');
 const small = run(synthetic({ rate: 1, seconds: 180, users: 20, burst: { atMs: 120_000, forMs: 20_000, mult: 5 } }));
@@ -124,9 +144,9 @@ const large = run(synthetic({ rate: 40, seconds: 180, users: 500, burst: { atMs:
 const peakSmall = Math.max(...small.samples.filter((s) => s.now >= 120_000 && s.now <= 145_000).map((s) => s.hype));
 const peakLarge = Math.max(...large.samples.filter((s) => s.now >= 120_000 && s.now <= 145_000).map((s) => s.hype));
 console.log(`peak hype — 1 msg/s channel: ${peakSmall}   40 msg/s channel: ${peakLarge}`);
-check('8a. small channel burst registers', peakSmall >= 75);
-check('8b. large channel burst registers', peakLarge >= 75);
-check('8c. scales agree within 20 points', Math.abs(peakSmall - peakLarge) <= 20);
+check('9a. small channel burst registers', peakSmall >= 75);
+check('9b. large channel burst registers', peakLarge >= 75);
+check('9c. scales agree within 20 points', Math.abs(peakSmall - peakLarge) <= 20);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(failures ? 1 : 0);

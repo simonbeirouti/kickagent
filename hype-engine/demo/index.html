@@ -73,6 +73,18 @@
   .toast.impact-up { border-color: var(--green); }
   .toast.impact-flat { border-color: var(--amber); background: rgba(255,176,32,.07); }
   .toast.impact-down { border-color: var(--red); background: rgba(255,77,77,.07); }
+  .toast.clip { border-color: var(--green); background: rgba(83,252,24,.12); }
+
+  /* Highlights recap */
+  #highlightsCard { display: flex; flex-direction: column; min-height: 0; max-height: 34%; }
+  #highlights { overflow-y: auto; min-height: 0; }
+  #highlights .empty { color: var(--muted); font-size: 0.82rem; }
+  .hl { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+  .hl:last-child { border-bottom: none; }
+  .hl .range { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hl .head { flex: 1; color: var(--text); }
+  .hl .peak { color: var(--amber); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hl .topic { color: var(--muted); white-space: nowrap; }
 
   #chatCard, #assistCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 </style>
@@ -107,6 +119,10 @@
       <h2>Hot Topics · what chat cares about</h2>
       <div id="topics"></div>
     </div>
+    <div class="card" id="highlightsCard">
+      <h2>Highlights Recap · clip markers</h2>
+      <div id="highlights"><div class="empty">No highlights yet — they capture automatically when hype spikes.</div></div>
+    </div>
   </div>
 
   <div class="col">
@@ -129,12 +145,13 @@ import { HypeEngine } from '../src/engine.js';
 import { TopicTracker } from '../src/topics.js';
 import { KickAssistant } from '../src/assistant.js';
 import { TrendingTopics } from '../src/trending.js';
+import { HighlightTracker } from '../src/highlights.js';
 import { createScriptedReplay } from '../src/mock.js';
 
 const $ = (id) => document.getElementById(id);
 const fmtClock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 
-let engine, topics, assistant, events, ei, simNow, playing = true, speed = 1;
+let engine, topics, assistant, highlights, events, ei, simNow, playing = true, speed = 1;
 let displayHype = 0, targetState = null, lastSampleAt = 0;
 
 function toast(cls, html, when) {
@@ -148,9 +165,11 @@ function boot() {
   engine = new HypeEngine();
   topics = new TopicTracker();
   assistant = new KickAssistant(engine, topics, { trending: new TrendingTopics() });
+  highlights = new HighlightTracker({ topics });
   events = createScriptedReplay();
   ei = 0; simNow = 0; displayHype = 0; targetState = null; lastSampleAt = -1000;
   $('chat').innerHTML = ''; $('assist').innerHTML = '';
+  $('highlights').innerHTML = '<div class="empty">No highlights yet — they capture automatically when hype spikes.</div>';
   $('readyBadge').className = ''; $('readyBadge').textContent = 'CALIBRATING BASELINE…';
 
   assistant.on('ready', (p) => {
@@ -165,6 +184,25 @@ function boot() {
     const label = { up: 'HYPE UP', flat: 'FLAT', down: 'HYPE DOWN' }[p.verdict];
     toast(`impact-${p.verdict}`, `<b>Hit Me, Kick Me result — ${label}</b> · "${p.label}" moved hype ${p.preHype}→${p.postHype} (Δ${p.delta >= 0 ? '+' : ''}${p.delta})`, p.ts);
   });
+  highlights.on('highlight', (h) => {
+    addHighlight(h);
+    const range = `${fmtClock(h.startTs)}–${fmtClock(h.endTs)}`;
+    toast('clip', `<b>Clip captured:</b> ${range} · peak ${h.peakHype}${h.topTopic ? ` · ${h.topTopic}` : ''}`, h.endTs);
+  });
+}
+
+function addHighlight(h) {
+  const feed = $('highlights');
+  feed.querySelector('.empty')?.remove();
+  const el = document.createElement('div');
+  el.className = 'hl';
+  el.innerHTML = `
+    <span class="range">${fmtClock(h.startTs)}–${fmtClock(h.endTs)}</span>
+    <span class="head">${h.headline}</span>
+    <span class="peak">peak ${h.peakHype}</span>
+    <span class="topic">${h.topTopic || ''}</span>`;
+  feed.appendChild(el);
+  feed.scrollTop = feed.scrollHeight;
 }
 
 function renderChatLine(ev, flagged) {
@@ -190,12 +228,14 @@ function step(dtMs) {
       lastFlagToasted = ev.userId;
       toast('flag', `<b>Spam shield:</b> flagged <b>${ev.username}</b> — excluded from hype &amp; topics`, ev.ts);
     }
+    highlights.onEvent(ev, w);
     renderChatLine(ev, flagged);
   }
   if (simNow - lastSampleAt >= 250) {
     lastSampleAt = simNow;
     targetState = engine.sample(simNow);
     assistant.onSample(targetState, simNow);
+    highlights.onSample(targetState, simNow);
     renderTopics();
   }
 }
