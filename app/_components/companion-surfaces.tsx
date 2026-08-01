@@ -10,16 +10,14 @@ import {
   UsersIcon,
   ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useDemoOverlayState } from "@/lib/demo-overlay-store";
 import type { OverlayState } from "@/lib/overlay-state";
 
 type PhonePanel = "brief" | "chat" | "summary";
 
-export function GlassesSurface() {
-  const liveState = useLiveOverlayState();
-  if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
-
-  const { state } = liveState;
+export function GlassesSurface({ initialState }: { readonly initialState: OverlayState }) {
+  const state = useDemoOverlayState(initialState);
   return (
     <main className="glasses-surface">
       <div className="glasses-vignette" aria-hidden />
@@ -51,12 +49,9 @@ export function GlassesSurface() {
   );
 }
 
-export function StreamerPhoneSurface() {
-  const liveState = useLiveOverlayState();
+export function StreamerPhoneSurface({ initialState }: { readonly initialState: OverlayState }) {
+  const state = useDemoOverlayState(initialState);
   const [panel, setPanel] = useState<PhonePanel>("brief");
-  if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
-
-  const { state } = liveState;
   const topics = state.summary?.topics ?? [];
   return (
     <main className="phone-demo-stage">
@@ -148,53 +143,6 @@ export function StreamerPhoneSurface() {
             <span>{state.channel.category || "No category"}</span>
           </footer>
         </div>
-      </div>
-    </main>
-  );
-}
-
-function useLiveOverlayState(): { readonly error?: string; readonly state?: OverlayState } {
-  const [state, setState] = useState<OverlayState>();
-  const [error, setError] = useState<string>();
-
-  const refresh = useCallback(async (syncKick = false) => {
-    try {
-      const search = syncKick ? "?sync=kick" : "";
-      const response = await fetch(`/api/overlay/state${search}`, { cache: "no-store" });
-      if (response.status === 401) {
-        setState(undefined);
-        setError("Connect Kick to receive live stream data.");
-        return;
-      }
-      if (!response.ok) throw new Error("Live stream update failed.");
-      setState((await response.json()) as OverlayState);
-      setError(undefined);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Live stream update failed.");
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh(true);
-    let refreshCount = 0;
-    const timer = window.setInterval(() => {
-      refreshCount += 1;
-      void refresh(refreshCount % 5 === 0);
-    }, 2_000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
-
-  return { error, state };
-}
-
-function SurfaceStatus({ error }: { readonly error?: string }) {
-  return (
-    <main className="connect-screen">
-      <div className="connect-card">
-        <div className="kick-mark">K</div>
-        <p className="eyebrow">Live streamer companion</p>
-        <h1>{error ?? "Connecting to live stream…"}</h1>
-        {error ? <a className="connect-button" href="/api/auth/kick/start">Connect Kick<span aria-hidden>→</span></a> : null}
       </div>
     </main>
   );

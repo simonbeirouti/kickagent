@@ -6,7 +6,6 @@ import {
   ExternalLinkIcon,
   GlassesIcon,
   GripVerticalIcon,
-  LogOutIcon,
   MessageCircleIcon,
   MonitorUpIcon,
   RadioIcon,
@@ -15,8 +14,12 @@ import {
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
+import {
+  publishDemoOverlayState,
+  useDemoOverlayState,
+} from "@/lib/demo-overlay-store";
 import {
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
@@ -55,101 +58,21 @@ const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
 };
 
 export function KickOverlay({
-  accessToken,
+  initialState,
   publicMode = false,
 }: {
-  readonly accessToken?: string;
+  readonly initialState: OverlayState;
   readonly publicMode?: boolean;
 }) {
-  const [state, setState] = useState<OverlayState>();
-  const [draftLayout, setDraftLayout] = useState<OverlayLayout>();
-  const [authenticated, setAuthenticated] = useState<boolean>();
-  const [error, setError] = useState<string>();
-  const [disconnecting, setDisconnecting] = useState(false);
+  const state = useDemoOverlayState(initialState);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [selectedScreen, setSelectedScreen] = useState<ManagedScreen>("public");
-  const [surfaceLayouts, setSurfaceLayouts] = useState<Partial<Record<ManagedScreen, OverlayLayout>>>({});
-
-  const refresh = useCallback(
-    async (syncKick = false) => {
-      try {
-        const search = new URLSearchParams();
-        if (accessToken) search.set("token", accessToken);
-        else if (publicMode) search.set("public", "overlay");
-        if (syncKick) search.set("sync", "kick");
-        const response = await fetch(`/api/overlay/state?${search}`, { cache: "no-store" });
-        if (response.status === 401) {
-          setAuthenticated(false);
-          setState(undefined);
-          return;
-        }
-        if (!response.ok) throw new Error("Overlay update failed.");
-        const next = (await response.json()) as OverlayState;
-        setState(next);
-        if (!publicMode) setDraftLayout((current) => current ?? next.layout);
-        setAuthenticated(true);
-        setError(undefined);
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Overlay update failed.");
-      }
-    },
-    [accessToken, publicMode],
-  );
-
-  useEffect(() => {
-    const queryError = new URLSearchParams(window.location.search).get("error");
-    if (queryError && !publicMode) setError(formatConnectionError(queryError));
-    void refresh(true);
-    let refreshCount = 0;
-    const timer = window.setInterval(() => {
-      refreshCount += 1;
-      void refresh(refreshCount % 5 === 0);
-    }, 2_000);
-    return () => window.clearInterval(timer);
-  }, [publicMode, refresh]);
-
-  const saveLayout = async (layout: OverlayLayout) => {
-    setDraftLayout(layout);
-    setSaveState("saving");
-    try {
-      const response = await fetch("/api/overlay/layout", {
-        body: JSON.stringify(layout),
-        headers: { "content-type": "application/json" },
-        method: "PUT",
-      });
-      if (!response.ok) throw new Error("Could not save the overlay layout.");
-      setSaveState("saved");
-      window.setTimeout(() => setSaveState("idle"), 1_500);
-    } catch (cause) {
-      setSaveState("idle");
-      setError(cause instanceof Error ? cause.message : "Could not save the overlay layout.");
-    }
-  };
-
-  const disconnect = async () => {
-    setDisconnecting(true);
-    try {
-      const response = await fetch("/api/auth/kick/disconnect", { method: "POST" });
-      if (!response.ok) throw new Error("Disconnect failed.");
-      setState(undefined);
-      setAuthenticated(false);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Disconnect failed.");
-    } finally {
-      setDisconnecting(false);
-    }
-  };
-
-  if (authenticated === undefined) return <LoadingScreen />;
-  if (!authenticated || !state) {
-    return publicMode ? <InvalidOverlayScreen /> : <ConnectScreen error={error} />;
-  }
 
   if (publicMode) {
     return (
       <main className="public-overlay-shell">
         <OverlayCanvas
-          layout={state.layout}
+          layout={state.screenLayouts?.public ?? state.layout}
           publicMode
           state={state}
         />
@@ -157,15 +80,19 @@ export function KickOverlay({
     );
   }
 
-  const layout = draftLayout ?? state.layout;
   const selectedScreenDetails = MANAGED_SCREENS.find((screen) => screen.id === selectedScreen)!;
-  const activeLayout = selectedScreen === "public" ? layout : surfaceLayouts[selectedScreen] ?? [];
+  const activeLayout = selectedScreen === "public"
+    ? state.screenLayouts?.public ?? state.layout
+    : state.screenLayouts?.[selectedScreen] ?? [];
   const saveActiveLayout = async (next: OverlayLayout) => {
-    if (selectedScreen === "public") {
-      await saveLayout(next);
-      return;
-    }
-    setSurfaceLayouts((current) => ({ ...current, [selectedScreen]: next }));
+    setSaveState("saving");
+    publishDemoOverlayState({
+      ...state,
+      layout: selectedScreen === "public" ? next : state.layout,
+      screenLayouts: { ...state.screenLayouts, [selectedScreen]: next },
+    });
+    setSaveState("saved");
+    window.setTimeout(() => setSaveState("idle"), 1_500);
   };
   return (
     <main className="dashboard-shell">
@@ -183,22 +110,12 @@ export function KickOverlay({
         </div>
         <div className="header-actions">
           <StatusPill live={state.live} />
-          <button
-            aria-label="Disconnect Kick"
-            className="icon-button"
-            disabled={disconnecting}
-            onClick={() => void disconnect()}
-            type="button"
-          >
-            <LogOutIcon size={17} />
-          </button>
+          <span className="demo-pill">Saved locally</span>
         </div>
       </header>
 
-      {error ? <div className="error-banner">{error}</div> : null}
-
       <div className="editor-layout dashboard-builder">
-        <WidgetLibrary layout={activeLayout} saveLayout={saveActiveLayout} saveState={selectedScreen === "public" ? saveState : "idle"} />
+        <WidgetLibrary layout={activeLayout} saveLayout={saveActiveLayout} saveState={saveState} />
         <section className="canvas-panel">
           <div className="screen-picker-row">
             <div>
