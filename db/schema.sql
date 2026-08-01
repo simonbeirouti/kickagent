@@ -39,6 +39,14 @@ CREATE INDEX IF NOT EXISTS app_sessions_connection_idx
   ON app_sessions (connection_id, expires_at DESC);
 
 -- statement-breakpoint
+ALTER TABLE kick_connections
+  ADD COLUMN IF NOT EXISTS overlay_layout jsonb NOT NULL DEFAULT '[
+    {"id":"suggestion","kind":"suggestion","x":1,"y":2,"width":14,"height":10},
+    {"id":"chat","kind":"chat","x":16,"y":1,"width":8,"height":6},
+    {"id":"hype","kind":"hype","x":16,"y":8,"width":8,"height":5}
+  ]'::jsonb;
+
+-- statement-breakpoint
 CREATE TABLE IF NOT EXISTS kick_webhook_events (
   event_message_id text PRIMARY KEY,
   event_type text NOT NULL,

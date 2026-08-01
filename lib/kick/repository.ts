@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/security";
 import type { KickChannel, KickProfile } from "@/lib/kick/oauth";
 import type { KickToken } from "@/lib/kick/types";
+import type { OverlayLayout } from "@/lib/overlay-layout";
 
 export interface ConnectionRecord extends Record<string, unknown> {
   readonly access_token_encrypted: string;
@@ -15,6 +16,7 @@ export interface ConnectionRecord extends Record<string, unknown> {
   readonly id: string;
   readonly is_live: boolean;
   readonly kick_user_id: string;
+  readonly overlay_layout: unknown;
   readonly profile_picture: string | null;
   readonly refresh_token_encrypted: string;
   readonly scopes: string[];
@@ -22,6 +24,18 @@ export interface ConnectionRecord extends Record<string, unknown> {
   readonly subscription_ids: string[];
   readonly token_expires_at: string;
   readonly workflow_generation: number;
+}
+
+export async function updateOverlayLayout(
+  connectionId: string,
+  layout: OverlayLayout,
+): Promise<void> {
+  await query(
+    `UPDATE kick_connections
+     SET overlay_layout = $2::jsonb
+     WHERE id = $1 AND active = true`,
+    [connectionId, JSON.stringify(layout)],
+  );
 }
 
 export async function findConnectionById(id: string): Promise<ConnectionRecord | undefined> {
@@ -167,6 +181,45 @@ export async function validKickAccessToken(connectionId: string): Promise<string
     throw new Error("Kick connection disappeared during refresh.");
   }
   return decryptSecret(connection.access_token_encrypted);
+}
+
+export async function refreshKickChannelIfStale(
+  connection: ConnectionRecord,
+): Promise<ConnectionRecord> {
+  const claimed = await query<ConnectionRecord>(
+    `UPDATE kick_connections
+     SET updated_at = now()
+     WHERE id = $1
+       AND active = true
+       AND updated_at < now() - interval '10 seconds'
+     RETURNING *`,
+    [connection.id],
+  );
+  if (!claimed[0]) return connection;
+
+  const accessToken = await validKickAccessToken(connection.id);
+  const { getKickChannel } = await import("@/lib/kick/oauth");
+  const channel = await getKickChannel(accessToken);
+  const rows = await query<ConnectionRecord>(
+    `UPDATE kick_connections SET
+      channel_slug = $2,
+      is_live = $3,
+      stream_title = $4,
+      category_name = $5,
+      category_id = $6,
+      updated_at = now()
+     WHERE id = $1 AND active = true
+     RETURNING *`,
+    [
+      connection.id,
+      channel.slug,
+      channel.isLive,
+      channel.streamTitle ?? null,
+      channel.categoryName ?? null,
+      channel.categoryId ?? null,
+    ],
+  );
+  return rows[0] ?? connection;
 }
 
 async function waitForRotatedAccessToken(

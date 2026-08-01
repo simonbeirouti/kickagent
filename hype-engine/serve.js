@@ -1,10 +1,14 @@
 // Minimal static server so the demo's ES module imports work.
 // Usage: node serve.js  →  http://localhost:8420/demo/
 //        live mode      →  http://localhost:8420/demo/?source=live
+//        glasses HUD    →  http://localhost:8420/glasses/hype-glasses-hud.html?source=live
 //
 // /sse-proxy pipes the deployed kick-hype-starter SSE feed same-origin,
 // because the deployment doesn't send CORS headers, so a browser page served
 // from localhost can't consume it directly with EventSource.
+//
+// /glasses/* is served from the sibling repo-root glasses/ directory so the
+// glasses HUD's live mode gets the same /src/* engine imports and /sse-proxy.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, extname, normalize, dirname } from 'node:path';
@@ -41,12 +45,17 @@ async function pipeSse(req, res) {
   }
 }
 
+const REPO_ROOT = dirname(ROOT);
+const PORT = Number(process.env.PORT) || 8420;
+
 createServer(async (req, res) => {
   let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (path === '/sse-proxy') return pipeSse(req, res);
+  if (path === '/glasses' || path === '/glasses/') path = '/glasses/hype-glasses-hud.html';
   if (path.endsWith('/')) path += 'index.html';
-  const file = normalize(join(ROOT, path));
-  if (!file.startsWith(ROOT)) { res.writeHead(403).end(); return; }
+  const base = path.startsWith('/glasses/') ? REPO_ROOT : ROOT;
+  const file = normalize(join(base, path));
+  if (!file.startsWith(base)) { res.writeHead(403).end(); return; }
   try {
     const body = await readFile(file);
     res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
@@ -54,4 +63,7 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404).end('not found');
   }
-}).listen(8420, () => console.log('demo at http://localhost:8420/demo/  ·  live: http://localhost:8420/demo/?source=live'));
+}).listen(PORT, () => console.log(
+  `demo at http://localhost:${PORT}/demo/  ·  live: http://localhost:${PORT}/demo/?source=live\n` +
+  `glasses HUD live: http://localhost:${PORT}/glasses/hype-glasses-hud.html?source=live`,
+));
