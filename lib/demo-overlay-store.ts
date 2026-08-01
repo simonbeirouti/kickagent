@@ -9,7 +9,6 @@ const STORAGE_KEY = "kickagent-demo-state-v2";
 const LEGACY_STORAGE_KEY = "kickagent-demo-state-v1";
 const LEGACY_LAYOUT_KEY = "kickagent-demo-layout";
 const STATE_EVENT = "kickagent:demo-state";
-const STATE_CHANNEL = "kickagent-demo-state";
 
 interface StoredState {
   readonly state: OverlayState;
@@ -23,33 +22,6 @@ export function useDemoOverlayState(initialState: OverlayState): OverlayState {
     setState(readDemoOverlayState(initialState));
     return subscribeToDemoOverlayState(setState);
   }, [initialState]);
-
-  return state;
-}
-
-export function usePublicDemoOverlayState(initialState: OverlayState, enabled = true): OverlayState {
-  const [state, setState] = useState(initialState);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const response = await fetch("/api/demo-overlay/state", { cache: "no-store" });
-        if (!response.ok) return;
-        const next = await response.json() as OverlayState;
-        if (!cancelled) setState(next);
-      } catch {
-        // Keep the last known overlay state while the server is unavailable.
-      }
-    };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 1_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [enabled]);
 
   return state;
 }
@@ -86,16 +58,6 @@ export function publishDemoOverlayState(state: OverlayState): OverlayState {
     JSON.stringify({ state: next, version: STATE_VERSION } satisfies StoredState),
   );
   window.dispatchEvent(new CustomEvent<OverlayState>(STATE_EVENT, { detail: next }));
-  const channel = new BroadcastChannel(STATE_CHANNEL);
-  channel.postMessage(next);
-  channel.close();
-  void fetch("/api/demo-overlay/state", {
-    body: JSON.stringify(next),
-    headers: { "content-type": "application/json" },
-    method: "PUT",
-  }).catch(() => {
-    // Local storage remains the fallback when the demo server is unavailable.
-  });
   return next;
 }
 
@@ -110,17 +72,11 @@ function subscribeToDemoOverlayState(onState: (state: OverlayState) => void): ()
       // Keep the last valid state if another tab writes malformed data.
     }
   };
-  const channel = new BroadcastChannel(STATE_CHANNEL);
-  const onChannel = (event: MessageEvent<OverlayState>) => onState(event.data);
-
   window.addEventListener(STATE_EVENT, onCustomEvent);
   window.addEventListener("storage", onStorage);
-  channel.addEventListener("message", onChannel);
   return () => {
     window.removeEventListener(STATE_EVENT, onCustomEvent);
     window.removeEventListener("storage", onStorage);
-    channel.removeEventListener("message", onChannel);
-    channel.close();
   };
 }
 

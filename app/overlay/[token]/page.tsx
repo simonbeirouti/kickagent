@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { KickOverlay } from "@/app/_components/kick-overlay";
-import { createDemoOverlayState } from "@/lib/overlay-state";
 
 export const metadata: Metadata = {
   referrer: "no-referrer",
@@ -8,6 +7,11 @@ export const metadata: Metadata = {
   title: "Kick Streamer Companion Overlay",
 };
 
-export default function PublicOverlayPage() {
-  return <KickOverlay initialState={createDemoOverlayState()} publicMode />;
+export default async function PublicOverlayPage({
+  params,
+}: {
+  readonly params: Promise<{ readonly token: string }>;
+}) {
+  const { token } = await params;
+  return <KickOverlay accessToken={token} publicMode />;
 }
