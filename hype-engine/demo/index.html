@@ -117,19 +117,31 @@
   .hl .peak { color: var(--amber); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .hl .topic { color: var(--muted); white-space: nowrap; }
 
-  #assistCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #chatCard, #assistCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* Live mode (?source=live): real SSE events, no chat pane. */
+  #srcBadge {
+    padding: 0.25rem 0.6rem; border-radius: 7px; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.1em; border: 1px solid var(--border); color: var(--muted);
+  }
+  #srcBadge.live-on { color: var(--green); border-color: var(--green); background: rgba(83,252,24,.08); }
+  #srcBadge.live-off { color: var(--red); border-color: var(--red); background: rgba(255,77,77,.08); }
+  body.live #chatCol { display: none; }
+  body.live main { grid-template-columns: 1.15fr 1fr; }
+  body.live .mock-only { display: none; }
 </style>
 </head>
 <body>
 <header>
   <h1>KICK-ASS<span>(ISTANT)</span> · HYPE ENGINE</h1>
   <span class="clock" id="clock">0:00</span>
+  <span id="srcBadge">MOCK REPLAY</span>
   <div class="spacer"></div>
-  <button id="playBtn" class="primary">Pause</button>
-  <button id="speedBtn">Speed 1×</button>
+  <button id="playBtn" class="primary mock-only">Pause</button>
+  <button id="speedBtn" class="mock-only">Speed 1×</button>
   <button id="restartBtn">Restart</button>
-  <button id="burstBtn">Inject hype burst</button>
-  <button id="spamBtn">Inject spammer</button>
+  <button id="burstBtn" class="mock-only">Inject hype burst</button>
+  <button id="spamBtn" class="mock-only">Inject spammer</button>
   <button id="dareBtn">Hit Me, Kick Me</button>
 </header>
 
@@ -160,6 +172,13 @@
     </div>
   </div>
 
+  <div class="col" id="chatCol">
+    <div class="card" id="chatCard">
+      <h2>Chat · mock replay (mirrors KICK webhook payloads)</h2>
+      <div class="feed" id="chat"></div>
+    </div>
+  </div>
+
   <div class="col">
     <div class="card" id="assistCard">
       <h2>Assistant · suggestions, flags &amp; Hit Me, Kick Me impact</h2>
@@ -179,8 +198,23 @@ import { createScriptedReplay } from '../src/mock.js';
 const $ = (id) => document.getElementById(id);
 const fmtClock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 
+// ---- source mode ----
+// Default: deterministic scripted replay (stage insurance).
+// ?source=live[&sse=<url>][&channel=<broadcaster_user_id>] feeds REAL events
+// from a kick-hype-starter SSE stream instead. No chat pane in live mode —
+// meter, topics, highlights and assistant feed only.
+const params = new URLSearchParams(location.search);
+const LIVE = params.get('source') === 'live';
+const DEFAULT_SSE = 'https://kick-hype-starter-production.up.railway.app/api/events/stream';
+// The deployment sends no CORS headers, so when the demo is served by our
+// serve.js (port 8420) we default to its same-origin /sse-proxy, which pipes
+// the same deployed stream. Anywhere else, hit the deployment directly.
+const SSE_URL = params.get('sse') || (location.port === '8420' ? '/sse-proxy' : DEFAULT_SSE);
+const CHANNEL = params.get('channel') ? Number(params.get('channel')) : null;
+
 let engine, topics, assistant, highlights, events, ei, simNow, playing = true, speed = 1;
 let displayHype = 0, targetState = null, lastSampleAt = 0;
+let es = null, liveT0 = 0;
 
 function toast(cls, html, when) {
   const el = document.createElement('div');
@@ -194,7 +228,7 @@ function boot() {
   topics = new TopicTracker();
   assistant = new KickAssistant(engine, topics, { trending: new TrendingTopics() });
   highlights = new HighlightTracker({ topics });
-  events = createScriptedReplay();
+  events = LIVE ? [] : createScriptedReplay();
   ei = 0; simNow = 0; displayHype = 0; targetState = null; lastSampleAt = -1000;
   $('assist').innerHTML = '';
   $('highlights').innerHTML = '<div class="empty">No highlights yet — they capture automatically when hype spikes.</div>';
@@ -217,6 +251,79 @@ function boot() {
     const range = `${fmtClock(h.startTs)}–${fmtClock(h.endTs)}`;
     toast('clip', `<b>Clip captured:</b> ${range} · peak ${h.peakHype}${h.topTopic ? ` · ${h.topTopic}` : ''}`, h.endTs);
   });
+
+  if (LIVE) connectLive();
+}
+
+// ---- live mode: real KICK events over SSE ----
+// Maps kick-hype-starter SSE messages ({ id, type, receivedAt, payload }
+// where payload is the raw KICK webhook payload) into the engine's event
+// shape. Same mapping as test/live-replay.js. Events are clocked on arrival
+// (one consistent local clock — no webhook/browser clock-skew headaches).
+function mapKickEvent(msg) {
+  const p = msg.payload || {};
+  const kind = String(msg.type || '').replace(/^fake:/, '');
+  const base = { id: msg.id, broadcaster: p.broadcaster?.user_id ?? null };
+  switch (kind) {
+    case 'chat.message.sent': {
+      const s = p.sender || {};
+      return { ...base, id: p.message_id || msg.id, type: 'chat',
+        userId: String(s.user_id ?? 'anonymous'), username: s.username || 'Anonymous',
+        badges: (s.identity?.badges || []).map((b) => b.type), text: p.content || '' };
+    }
+    case 'kicks.gifted': {
+      const g = p.gifter || {};
+      return { ...base, type: 'kicks', userId: String(g.user_id ?? 'anonymous'),
+        username: g.username || 'Anonymous', badges: [], raw: p.gift?.amount || 1 };
+    }
+    case 'channel.subscription.new':
+    case 'channel.subscription.renewal': {
+      const s = p.subscriber || {};
+      return { ...base, type: 'sub', userId: String(s.user_id ?? 'anonymous'),
+        username: s.username || 'Anonymous', badges: [], raw: 1 };
+    }
+    case 'channel.subscription.gifts': {
+      const g = p.gifter || {};
+      const n = Array.isArray(p.giftees) ? p.giftees.length : 1;
+      return { ...base, type: 'sub', userId: String(g.user_id ?? 'anonymous'),
+        username: g.username || 'Anonymous', badges: [], raw: Math.max(1, n) };
+    }
+    case 'channel.followed': {
+      const f = p.follower || {};
+      return { ...base, type: 'follow', userId: String(f.user_id ?? 'anonymous'),
+        username: f.username || 'Anonymous', badges: [] };
+    }
+    default:
+      return null; // assistant.*, livestream.status.updated, unknown types
+  }
+}
+
+function connectLive() {
+  es?.close();
+  liveT0 = Date.now();
+  const badge = $('srcBadge');
+  badge.className = 'live-off';
+  badge.textContent = 'LIVE · connecting…';
+  es = new EventSource(SSE_URL);
+  es.onopen = () => { badge.className = 'live-on'; badge.textContent = `LIVE · ${new URL(SSE_URL, location.href).host}`; };
+  es.onerror = () => { badge.className = 'live-off'; badge.textContent = 'LIVE · reconnecting…'; };
+  es.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    const ev = mapKickEvent(msg);
+    if (!ev) return;
+    if (CHANNEL != null && ev.broadcaster !== CHANNEL) return;
+    ev.ts = Date.now() - liveT0;
+    const w = engine.ingest(ev);
+    const flagged = engine.isFlagged(ev.userId);
+    if (!flagged) topics.ingest(ev, w);
+    if (flagged && ev.userId !== lastFlagToasted) {
+      lastFlagToasted = ev.userId;
+      toast('flag', `<b>Spam shield:</b> flagged <b>${ev.username}</b> — excluded from hype &amp; topics`, ev.ts);
+    }
+    highlights.onEvent(ev, w);
+    // No chat rendering in live mode — the chat column is hidden by design.
+  };
 }
 
 function addHighlight(h) {
@@ -234,17 +341,24 @@ function addHighlight(h) {
 }
 
 function step(dtMs) {
-  simNow += dtMs;
-  while (ei < events.length && events[ei].ts <= simNow) {
-    const ev = events[ei++];
-    const w = engine.ingest(ev);
-    const flagged = engine.isFlagged(ev.userId);
-    if (!flagged) topics.ingest(ev, w);
-    if (flagged && ev.userId !== lastFlagToasted) {
-      lastFlagToasted = ev.userId;
-      toast('flag', `<b>Spam shield:</b> flagged <b>${ev.username}</b> — excluded from hype &amp; topics`, ev.ts);
+  if (LIVE) {
+    // Live events ingest on SSE arrival; the loop only advances the shared
+    // clock (same one the arrival handler stamps events with) and samples.
+    simNow = Date.now() - liveT0;
+  } else {
+    simNow += dtMs;
+    while (ei < events.length && events[ei].ts <= simNow) {
+      const ev = events[ei++];
+      const w = engine.ingest(ev);
+      const flagged = engine.isFlagged(ev.userId);
+      if (!flagged) topics.ingest(ev, w);
+      if (flagged && ev.userId !== lastFlagToasted) {
+        lastFlagToasted = ev.userId;
+        toast('flag', `<b>Spam shield:</b> flagged <b>${ev.username}</b> — excluded from hype &amp; topics`, ev.ts);
+      }
+      highlights.onEvent(ev, w);
+      renderChatLine(ev, flagged);
     }
-    highlights.onEvent(ev, w);
   }
   if (simNow - lastSampleAt >= 250) {
     lastSampleAt = simNow;
@@ -325,9 +439,10 @@ $('spamBtn').onclick = () => injectSpammer();
 $('dareBtn').onclick = () => {
   assistant.trackAction('viewer dare', simNow);
   toast('', `<b>Hit Me, Kick Me started</b> — measuring hype impact for 15s…`, simNow);
-  setTimeout(() => injectBurst(), 1500 / speed); // mocked chat reaction to the dare
+  if (!LIVE) setTimeout(() => injectBurst(), 1500 / speed); // mocked chat reaction; live mode measures the real one
 };
 
+if (LIVE) document.body.classList.add('live');
 boot();
 let lastFrame = performance.now();
 (function loop(t) {

@@ -4,6 +4,16 @@ A private, streamer-only overlay built with Next.js, eve, Neon Postgres, and Ver
 ingests signed Kick chat webhooks and creates one short talking-point cue every 30 seconds while a
 channel is live.
 
+Also in this repo:
+
+- `hype-engine/` — zero-dependency hype scoring package (self-calibrating z-score, topics,
+  assistant suggestions, bet impact verdicts, highlight markers). Used by this app's `/overlay`
+  route and by the starter below.
+- `starter/` — the kick-hype-starter demo app (17 demo pages, SSE event feed, bets economy,
+  glasses HUD), now running on the shared hype engine as its scoring brain (see
+  `starter/README.md`). Run it standalone: `cd starter && npm install && npm run dev`.
+- `overlay/hype-meter.html` — standalone OBS-ready bar-meter widget.
+
 ## Kick developer setup
 
 1. Enable 2FA on the Kick account and create an app under
