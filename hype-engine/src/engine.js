@@ -39,6 +39,7 @@ const DEFAULTS = {
   spamUnflagBelow: 2,        // flag expires when the decayed dupe count falls back here
   noveltyWindowMs: 60_000,   // duplicate texts within this window are discounted
   trendWindowMs: 12_000,     // slope window for rising/falling
+  silenceFloorRaw: 0.5,      // raw activity below this (≈1 msg/30s) reads as dead air
 };
 
 export class HypeEngine {
@@ -184,7 +185,12 @@ export class HypeEngine {
     const sigma = Math.sqrt(this.V);
 
     const z = (sNow - this.B) / (sigma + 1e-6);
-    const H = 100 / (1 + Math.exp(-(z - this.o.z0) / this.o.k));
+    // True-silence guard: in a long-dead chat B and σ both decay toward zero
+    // but σ decays SLOWER, so z drifts back to 0 and the score creeps up to
+    // the sigmoid midpoint (~40) — a dead channel would read "good energy".
+    // Below ~1 message per 30s, scale the score toward 0: dead air reads dead.
+    const quiet = Math.min(1, sNow / this.o.silenceFloorRaw);
+    const H = quiet * (100 / (1 + Math.exp(-(z - this.o.z0) / this.o.k)));
 
     // Trend: H slope over the trend window (per second).
     this.trendBuf.push({ ts: now, H });
