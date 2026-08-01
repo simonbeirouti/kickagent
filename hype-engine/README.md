@@ -11,6 +11,8 @@ npm test    # simulation harness: 18 behaviour checks against the scripted repla
 npm run demo    # serves the live dashboard at http://localhost:8420/demo/
 ```
 
+Open `http://localhost:8420/demo/predictions.html` for the prediction pool display.
+
 ## What's in the box
 
 | File | What it does |
