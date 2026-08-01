@@ -11,6 +11,9 @@ import {
 describe("overlay layout", () => {
   it("accepts widgets placed inside the fixed 24 by 14 canvas", () => {
     expect(overlayLayoutSchema.safeParse(DEFAULT_OVERLAY_LAYOUT).success).toBe(true);
+    expect(DEFAULT_OVERLAY_LAYOUT.map(({ kind }) => kind)).toEqual(
+      expect.arrayContaining(["prediction", "actionBet"]),
+    );
   });
 
   it("has an in-bounds default placement for every widget kind", () => {
