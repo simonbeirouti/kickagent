@@ -14,9 +14,9 @@ import type { OverlayState } from "@/lib/overlay-state";
 
 type PhonePanel = "brief" | "chat" | "summary";
 
-export function StreamerPhoneSurface() {
-  const liveState = useLiveOverlayState();
-  if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
+export function StreamerPhoneSurface({ publicMode = false }: { readonly publicMode?: boolean }) {
+  const liveState = useLiveOverlayState({ publicMode });
+  if (!liveState.state) return <SurfaceStatus error={liveState.error} publicMode={publicMode} />;
   const state = liveState.state;
   const [panel, setPanel] = useState<PhonePanel>("brief");
   const topics = state.summary?.topics ?? [];
@@ -115,14 +115,20 @@ export function StreamerPhoneSurface() {
   );
 }
 
-function SurfaceStatus({ error }: { readonly error?: string }) {
+function SurfaceStatus({
+  error,
+  publicMode,
+}: {
+  readonly error?: string;
+  readonly publicMode: boolean;
+}) {
   return (
     <main className="connect-screen">
       <div className="connect-card">
         <div className="kick-mark">K</div>
         <p className="eyebrow">Live streamer companion</p>
         <h1>{error ?? "Connecting to live stream…"}</h1>
-        {error ? <a className="connect-button" href="/api/auth/kick/start">Connect Kick<span aria-hidden>→</span></a> : null}
+        {error && !publicMode ? <a className="connect-button" href="/api/auth/kick/start">Connect Kick<span aria-hidden>→</span></a> : null}
       </div>
     </main>
   );

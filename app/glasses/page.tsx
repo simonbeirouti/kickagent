@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function GlassesPage() {
-  return <KickOverlay liveScreen="glasses" />;
+  return <KickOverlay liveScreen="glasses" publicMode />;
 }

@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function StreamerPhonePage() {
-  return <StreamerPhoneSurface />;
+  return <StreamerPhoneSurface publicMode />;
 }
