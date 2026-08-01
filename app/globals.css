@@ -227,6 +227,7 @@ body:has(.glasses-surface) {
 }
 
 .glasses-private-card,
+.glasses-prediction-card,
 .glasses-cue-card {
   position: absolute;
   z-index: 2;
@@ -236,12 +237,21 @@ body:has(.glasses-surface) {
   backdrop-filter: blur(18px);
 }
 
-.glasses-private-card {
+.glasses-private-card,
+.glasses-prediction-card {
   top: 18%;
-  right: clamp(1.25rem, 6vw, 6rem);
   width: min(22rem, 38vw);
   padding: 1rem 1.1rem 1.05rem;
   border-radius: 1rem;
+}
+
+.glasses-private-card {
+  right: clamp(1.25rem, 6vw, 6rem);
+}
+
+.glasses-prediction-card {
+  left: clamp(1.25rem, 6vw, 6rem);
+  border-color: rgb(83 252 24 / 22%);
 }
 
 .glasses-card-label,
@@ -262,7 +272,8 @@ body:has(.glasses-surface) {
   text-transform: uppercase;
 }
 
-.glasses-private-card strong {
+.glasses-private-card strong,
+.glasses-prediction-card strong {
   display: block;
   font-size: clamp(0.88rem, 1.3vw, 1.05rem);
   line-height: 1.35;
@@ -273,6 +284,40 @@ body:has(.glasses-surface) {
   color: #89928b;
   font-size: 0.72rem;
   line-height: 1.5;
+}
+
+.glasses-prediction-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.glasses-prediction-yes,
+.glasses-prediction-no {
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.glasses-prediction-yes {
+  background: rgb(83 252 24 / 12%);
+  color: #91ff6c;
+}
+
+.glasses-prediction-no {
+  background: rgb(255 90 90 / 12%);
+  color: #ff8f87;
+}
+
+.glasses-prediction-yes small,
+.glasses-prediction-no small {
+  display: block;
+  margin-top: 0.2rem;
+  color: rgb(244 248 245 / 62%);
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 .glasses-cue-card {

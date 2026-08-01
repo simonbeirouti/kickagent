@@ -6,6 +6,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   EyeIcon,
+  FlameIcon,
   GlassesIcon,
   LockKeyholeIcon,
   MessageCircleIcon,
@@ -13,6 +14,7 @@ import {
   RadioIcon,
   ShieldAlertIcon,
   SparklesIcon,
+  TrendingUpIcon,
   UsersIcon,
   ZapIcon,
 } from "lucide-react";
@@ -26,6 +28,10 @@ const GLASSES_CUES = [
 ] as const;
 
 type PhonePanel = "brief" | "chat" | "notes";
+
+function formatMoney(amount: number): string {
+  return `$${Math.round(amount).toLocaleString("en-US")}`;
+}
 
 export function GlassesSurface({ state }: { readonly state: OverlayState }) {
   const [cueIndex, setCueIndex] = useState(0);
@@ -49,6 +55,23 @@ export function GlassesSurface({ state }: { readonly state: OverlayState }) {
         <p>{privateContext?.notes[0] ?? "Your private notes will appear here."}</p>
       </section>
 
+      {state.prediction ? (
+        <section aria-label="Live prediction market" className="glasses-prediction-card">
+          <div className="glasses-card-label"><TrendingUpIcon size={14} /> Live prediction</div>
+          <strong>{state.prediction.question}</strong>
+          <div className="glasses-prediction-split">
+            <div className="glasses-prediction-yes">
+              <span>YES {state.prediction.yesPercent}%</span>
+              <small>{formatMoney(state.prediction.yesPool)}</small>
+            </div>
+            <div className="glasses-prediction-no">
+              <span>NO {100 - state.prediction.yesPercent}%</span>
+              <small>{formatMoney(state.prediction.noPool)}</small>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section aria-live="polite" className="glasses-cue-card">
         <div className="glasses-cue-meta">
           <span><SparklesIcon size={16} /> Agent suggestion</span>
@@ -71,6 +94,11 @@ export function GlassesSurface({ state }: { readonly state: OverlayState }) {
         <span><Mic2Icon size={14} /> Voice active</span>
         <span><EyeIcon size={14} /> Private display</span>
         <span><ActivityIcon size={14} /> Hype {state.hypeScore}</span>
+        {state.activeBet ? (
+          <span>
+            <FlameIcon size={14} /> Bet {formatMoney(state.activeBet.amount)} · {state.activeBet.status}
+          </span>
+        ) : null}
       </div>
     </main>
   );
