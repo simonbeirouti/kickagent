@@ -25,11 +25,15 @@ export type ManagedScreen = z.infer<typeof managedScreenSchema>;
 // One widget per kind, so a layout can never hold more than the kind count.
 export const MAX_WIDGETS = widgetKindSchema.options.length;
 
+export const MAX_WIDGET_LABEL_LENGTH = 48;
+
 export const widgetPlacementSchema = z
   .object({
     height: z.number().int().min(MIN_WIDGET_HEIGHT).max(OVERLAY_ROWS),
     id: z.string().min(1).max(64),
     kind: widgetKindSchema,
+    // Streamer-set display title; widgets fall back to their standard label.
+    label: z.string().trim().min(1).max(MAX_WIDGET_LABEL_LENGTH).optional(),
     width: z.number().int().min(MIN_WIDGET_WIDTH).max(OVERLAY_COLUMNS),
     x: z.number().int().min(0).max(OVERLAY_COLUMNS - 1),
     y: z.number().int().min(0).max(OVERLAY_ROWS - 1),

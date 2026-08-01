@@ -31,11 +31,16 @@ export function WidgetHeader({
   );
 }
 
-export function GoalsWidget({ state }: { readonly state: OverlayState }) {
+interface OverlayWidgetProps {
+  readonly label?: ReactNode;
+  readonly state: OverlayState;
+}
+
+export function GoalsWidget({ label = "Stream goals", state }: OverlayWidgetProps) {
   const goals = state.goals ?? [];
   return (
     <div className="canvas-widget-inner goals-canvas-widget">
-      <WidgetHeader icon={<TargetIcon size={17} />} label="Stream goals">
+      <WidgetHeader icon={<TargetIcon size={17} />} label={label}>
         <span className="count-badge">{goals.filter((goal) => goal.current >= goal.target).length}/{goals.length}</span>
       </WidgetHeader>
       <div className="goals-list">
@@ -62,14 +67,14 @@ export function GoalsWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function LeaderboardWidget({ state }: { readonly state: OverlayState }) {
+export function LeaderboardWidget({ label = "Top supporters", state }: OverlayWidgetProps) {
   // A gifted sub is worth 100 KICKs when ranking supporters.
   const supporters = [...(state.supporters ?? [])]
     .sort((a, b) => (b.kicks + b.giftedSubs * 100) - (a.kicks + a.giftedSubs * 100))
     .slice(0, 5);
   return (
     <div className="canvas-widget-inner board-canvas-widget">
-      <WidgetHeader icon={<CrownIcon size={17} />} label="Top supporters">
+      <WidgetHeader icon={<CrownIcon size={17} />} label={label}>
         <span className="count-badge">session</span>
       </WidgetHeader>
       <div className="board-list">
@@ -87,13 +92,13 @@ export function LeaderboardWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function BattleWidget({ state }: { readonly state: OverlayState }) {
+export function BattleWidget({ label = "Hype battle", state }: OverlayWidgetProps) {
   const battle = state.battle ?? { fire: 0, water: 0, wins: { fire: 0, water: 0 } };
   const total = battle.fire + battle.water;
   const firePercentage = total > 0 ? (battle.fire / total) * 100 : 50;
   return (
     <div className="canvas-widget-inner battle-canvas-widget">
-      <WidgetHeader icon={<FlameIcon size={17} />} label="Hype battle">
+      <WidgetHeader icon={<FlameIcon size={17} />} label={label}>
         <span className="count-badge">🔥 {battle.wins.fire} · {battle.wins.water} 💧</span>
       </WidgetHeader>
       <div className="battle-content">
@@ -113,13 +118,13 @@ export function BattleWidget({ state }: { readonly state: OverlayState }) {
 
 const BOSS_SPRITES = ["👹", "🐉", "👾", "🤖", "💀", "🦑"] as const;
 
-export function BossWidget({ state }: { readonly state: OverlayState }) {
+export function BossWidget({ label = "Stream boss", state }: OverlayWidgetProps) {
   const boss = state.boss ?? { hp: 500, level: 1, maxHp: 500, topDamage: [] };
   const hpPercentage = boss.maxHp > 0 ? Math.max(0, Math.min(100, (boss.hp / boss.maxHp) * 100)) : 0;
   const sprite = boss.hp <= 0 ? "💥" : BOSS_SPRITES[(boss.level - 1) % BOSS_SPRITES.length];
   return (
     <div className="canvas-widget-inner boss-canvas-widget">
-      <WidgetHeader icon={<SkullIcon size={17} />} label="Stream boss">
+      <WidgetHeader icon={<SkullIcon size={17} />} label={label}>
         <span className="count-badge">Lv {boss.level}</span>
       </WidgetHeader>
       <div className="boss-content">
@@ -142,13 +147,13 @@ export function BossWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function JarWidget({ state }: { readonly state: OverlayState }) {
+export function JarWidget({ label = "Support jar", state }: OverlayWidgetProps) {
   const jar = state.jar ?? { target: 1_000, units: 0 };
   const percentage = jar.target > 0 ? Math.min(100, Math.round((jar.units / jar.target) * 100)) : 0;
   const full = jar.units >= jar.target;
   return (
     <div className="canvas-widget-inner jar-canvas-widget">
-      <WidgetHeader icon={<CoinsIcon size={17} />} label="Support jar">
+      <WidgetHeader icon={<CoinsIcon size={17} />} label={label}>
         <span className="count-badge">{percentage}%</span>
       </WidgetHeader>
       <div className="jar-content">
@@ -164,7 +169,7 @@ export function JarWidget({ state }: { readonly state: OverlayState }) {
 
 const ALERT_ROTATE_MS = 4_000;
 
-export function AlertsWidget({ state }: { readonly state: OverlayState }) {
+export function AlertsWidget({ label = "Alerts", state }: OverlayWidgetProps) {
   const alerts = state.alerts ?? [];
   const [index, setIndex] = useState(0);
 
@@ -180,7 +185,7 @@ export function AlertsWidget({ state }: { readonly state: OverlayState }) {
   const alert = alerts[index % Math.max(1, alerts.length)];
   return (
     <div className="canvas-widget-inner alerts-canvas-widget">
-      <WidgetHeader icon={<BellRingIcon size={17} />} label="Alerts">
+      <WidgetHeader icon={<BellRingIcon size={17} />} label={label}>
         {alerts.length > 1 ? <span className="count-badge">+{alerts.length - 1} queued</span> : null}
       </WidgetHeader>
       <div className="alerts-content">
@@ -211,7 +216,7 @@ interface Floater {
   readonly x: number;
 }
 
-export function EmoteWallWidget({ state }: { readonly state: OverlayState }) {
+export function EmoteWallWidget({ label = "Emote wall", state }: OverlayWidgetProps) {
   const [floaters, setFloaters] = useState<readonly Floater[]>([]);
   const sequence = useRef(0);
   const emojiPool = [...extractEmoji(state.messages.map((message) => message.content).join(" ")), ...EMOTE_POOL];
@@ -241,7 +246,7 @@ export function EmoteWallWidget({ state }: { readonly state: OverlayState }) {
 
   return (
     <div className="canvas-widget-inner wall-canvas-widget">
-      <WidgetHeader icon={<SmilePlusIcon size={17} />} label="Emote wall" />
+      <WidgetHeader icon={<SmilePlusIcon size={17} />} label={label} />
       <div aria-hidden className="wall-stage">
         {floaters.map((floater) => (
           <span
@@ -261,12 +266,12 @@ export function EmoteWallWidget({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function PulseWidget({ state }: { readonly state: OverlayState }) {
+export function PulseWidget({ label = "Chat pulse", state }: OverlayWidgetProps) {
   const bars = velocityBars(state.hypeScore, state.messages.length);
   const words = trendingWords(state.messages.map((message) => message.content));
   return (
     <div className="canvas-widget-inner pulse-canvas-widget">
-      <WidgetHeader icon={<GaugeIcon size={17} />} label="Chat pulse">
+      <WidgetHeader icon={<GaugeIcon size={17} />} label={label}>
         <span className="count-badge">{Math.max(1, Math.round(state.hypeScore / 6))} msg/min</span>
       </WidgetHeader>
       <div className="pulse-content">

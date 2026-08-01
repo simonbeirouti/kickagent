@@ -11,11 +11,12 @@ import {
 } from "lucide-react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
+import { OverlayCanvas } from "@/app/_components/overlay-canvas";
 import { createHudEngine, type HudEngine, type HudSnapshot } from "@/lib/glasses-hud-engine";
 import { useLiveOverlayState } from "@/lib/live-overlay-store";
 import type { OverlayState } from "@/lib/overlay-state";
 
-type PhonePanel = "brief" | "chat" | "summary";
+type PhonePanel = "brief" | "chat" | "summary" | "widgets";
 
 const HUD_PANEL_KEYS = ["topbar", "prediction", "active", "predictions", "reticle", "toast"] as const;
 type HudPanelKey = (typeof HUD_PANEL_KEYS)[number];
@@ -27,6 +28,11 @@ export function GlassesSurface() {
   // during SSR — creating and ticking it only inside an effect keeps the
   // server-rendered markup and the first client render identical.
   const engineRef = useRef<HudEngine | null>(null);
+  // Widgets the streamer arranged for this screen in the studio, rendered live
+  // above the HUD. Interaction-locked and pointer-transparent so the HUD's own
+  // drag/keyboard controls keep working.
+  const liveOverlay = useLiveOverlayState();
+  const glassesLayout = liveOverlay.state?.screenLayouts?.glasses ?? [];
   const [snapshot, setSnapshot] = useState<HudSnapshot | null>(null);
   const [hintVisible, setHintVisible] = useState(true);
   const drag = useDraggableHudPanels();
@@ -230,6 +236,18 @@ export function GlassesSurface() {
         </div>
       </aside>
 
+      {liveOverlay.state && glassesLayout.length > 0 ? (
+        <div className="glasses-live-widgets">
+          <OverlayCanvas
+            embedded
+            layout={glassesLayout}
+            publicMode
+            screen="glasses"
+            state={liveOverlay.state}
+          />
+        </div>
+      ) : null}
+
       {drag.editMode ? <div className="glasses-hud-layout-badge">Layout edit — drag panels • L to exit • R to reset</div> : null}
       {hintVisible ? (
         <div className="glasses-hud-hint">H hide chrome • L move panels • N new prediction • B new bet • T toast • Double-click fullscreen</div>
@@ -338,10 +356,12 @@ function flashElement(element: HTMLElement, className: string): void {
 
 export function StreamerPhoneSurface() {
   const liveState = useLiveOverlayState();
+  // Hook order must not depend on whether live state has arrived yet.
+  const [panel, setPanel] = useState<PhonePanel>("brief");
   if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
   const state = liveState.state;
-  const [panel, setPanel] = useState<PhonePanel>("brief");
   const topics = state.summary?.topics ?? [];
+  const phoneLayout = state.screenLayouts?.phone ?? [];
   return (
     <main className="phone-demo-stage">
       <div className="phone-device">
@@ -370,7 +390,7 @@ export function StreamerPhoneSurface() {
           </section>
 
           <nav aria-label="Phone information panels" className="phone-tabs">
-            {(["brief", "chat", "summary"] as const).map((item) => (
+            {(["brief", "chat", "summary", "widgets"] as const).map((item) => (
               <button
                 aria-label={`${item}${item === "chat" ? `, ${state.messages.length} messages` : ""}`}
                 className={panel === item ? "active" : undefined}
@@ -423,6 +443,25 @@ export function StreamerPhoneSurface() {
                 <span className="phone-section-label"><ShieldAlertIcon size={13} /> Agent live summary</span>
                 <h2>{state.summary?.text ?? "Waiting for the first agent brief…"}</h2>
                 {topics.length > 0 ? <ul>{topics.map((topic) => <li key={topic.label}>{topic.label}</li>)}</ul> : null}
+              </section>
+            ) : null}
+
+            {panel === "widgets" ? (
+              <section className="phone-widgets-card">
+                <span className="phone-section-label"><ZapIcon size={13} /> Your arranged widgets</span>
+                {phoneLayout.length === 0 ? (
+                  <p>Arrange widgets for the phone screen in the overlay studio.</p>
+                ) : (
+                  <div className="phone-widgets-stage">
+                    <OverlayCanvas
+                      embedded
+                      layout={phoneLayout}
+                      publicMode
+                      screen="phone"
+                      state={state}
+                    />
+                  </div>
+                )}
               </section>
             ) : null}
           </div>
