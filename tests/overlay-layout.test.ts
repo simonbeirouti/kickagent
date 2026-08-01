@@ -1,13 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_OVERLAY_LAYOUT,
+  MAX_WIDGETS,
   overlayLayoutSchema,
   parseOverlayLayout,
+  WIDGET_DEFAULTS,
+  widgetKindSchema,
 } from "@/lib/overlay-layout";
 
 describe("overlay layout", () => {
   it("accepts widgets placed inside the fixed 24 by 14 canvas", () => {
     expect(overlayLayoutSchema.safeParse(DEFAULT_OVERLAY_LAYOUT).success).toBe(true);
+  });
+
+  it("has an in-bounds default placement for every widget kind", () => {
+    for (const kind of widgetKindSchema.options) {
+      expect(overlayLayoutSchema.safeParse([WIDGET_DEFAULTS[kind]]).success).toBe(true);
+    }
+  });
+
+  it("accepts a full canvas holding every widget kind at once", () => {
+    const full = widgetKindSchema.options.map((kind, index) => ({
+      height: 2,
+      id: kind,
+      kind,
+      width: 3,
+      x: index,
+      y: 0,
+    }));
+    expect(full).toHaveLength(MAX_WIDGETS);
+    expect(overlayLayoutSchema.safeParse(full).success).toBe(true);
   });
 
   it("rejects duplicate widget kinds and widgets outside the canvas", () => {
