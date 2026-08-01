@@ -35,28 +35,54 @@
   #fx { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
   #stage { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 5vw; z-index: 2; }
 
-  /* ---- Gauge ---- */
-  #gauge-wrap { position: relative; width: 440px; text-align: center; }
-  #gauge-wrap.tier2 #score { animation: pulse 0.8s ease-in-out infinite; }
+  /* ---- Bar meter ---- */
+  #meter-wrap { position: relative; width: 640px; }
+  #meter-wrap.tier2 #score { animation: pulse 0.8s ease-in-out infinite; transform-origin: left bottom; }
   @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 
+  #readout { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 1.1rem; }
   #score {
     font-family: 'Archivo Black', 'Space Grotesk', sans-serif;
     font-size: 6rem; font-weight: 400; line-height: 1;
     font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
   }
   #score small { font-size: 1.6rem; color: var(--muted); font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+  #readout-side { text-align: right; padding-bottom: 0.4rem; }
   #tier-label {
-    margin-top: 0.55rem; font-size: 1.05rem; font-weight: 700;
+    font-size: 1.05rem; font-weight: 700;
     letter-spacing: 0.42em; text-transform: uppercase; color: var(--muted);
-    text-indent: 0.42em; /* optically centre the tracked text */
+    margin-right: -0.42em; /* cancel trailing tracking so the text sits flush right */
   }
-  #stats { margin-top: 0.55rem; font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-  #spark { display: block; margin: 0.7rem auto 0; opacity: 0.9; }
-  .center-text { position: absolute; top: 51%; left: 50%; transform: translate(-50%, -50%); width: 100%; }
+  #stats { margin-top: 0.45rem; font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  #bar-area { position: relative; height: 44px; }
+  #bar-track { position: absolute; inset: 0; background: rgba(28, 38, 32, 0.95); border-radius: 22px; }
+  #bar-glow, #bar-fill {
+    position: absolute; left: 0; top: 0; height: 100%;
+    width: 0; min-width: 44px; /* keeps the pill cap round at tiny values */
+    border-radius: 22px; opacity: 0;
+  }
+  #bar-glow { filter: blur(13px); }
+  #bar-fill::after { /* sheen so the fill reads as lit, not flat */
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 55%);
+  }
+  #peak-mark { /* session-peak notch parked at the highest value reached */
+    position: absolute; top: -5px; bottom: -5px; width: 3px; border-radius: 2px;
+    background: #b6ff8f; box-shadow: 0 0 10px rgba(182, 255, 143, 0.8);
+    transform: translateX(-50%); opacity: 0; transition: opacity 0.4s;
+  }
+  #bar-ticks { position: relative; height: 12px; margin-top: 8px; }
+  #bar-ticks .tick {
+    position: absolute; top: 0; width: 2px; height: 7px;
+    background: #26332a; border-radius: 1px; transform: translateX(-50%);
+  }
+  #bar-ticks .tick.major { width: 3px; height: 12px; background: #3a4a3e; }
+
+  #spark { display: block; margin: 1rem auto 0; opacity: 0.9; }
   #brand {
     font-size: 0.72rem; letter-spacing: 0.34em; color: var(--kick-green);
-    text-transform: uppercase; margin-bottom: 0.7rem; font-weight: 700; text-indent: 0.34em;
+    text-transform: uppercase; margin-bottom: 0.9rem; font-weight: 700;
   }
 
   /* ---- Right rail ---- */
@@ -150,21 +176,23 @@
 <body>
 <canvas id="fx"></canvas>
 <div id="stage">
-  <div id="gauge-wrap">
-    <svg id="gauge" width="440" height="440" viewBox="0 0 440 440">
-      <g id="ticks"></g>
-      <path id="track" fill="none" stroke="rgba(28,38,32,0.95)" stroke-width="26" stroke-linecap="round"/>
-      <path id="arcGlow" fill="none" stroke="#5a6e75" stroke-width="26" stroke-linecap="round" opacity="0.5" style="filter: blur(13px)"/>
-      <path id="arc" fill="none" stroke="#5a6e75" stroke-width="26" stroke-linecap="round"/>
-      <circle id="peakDot" r="6" fill="#b6ff8f" opacity="0"/>
-    </svg>
-    <div class="center-text">
-      <div id="brand">Hype Score</div>
+  <div id="meter-wrap">
+    <div id="brand">Hype Score</div>
+    <div id="readout">
       <div id="score">0<small>/100</small></div>
-      <div id="tier-label">warming up</div>
-      <div id="stats"><span id="velocity">0</span> msg/min</div>
-      <canvas id="spark" width="240" height="44"></canvas>
+      <div id="readout-side">
+        <div id="tier-label">warming up</div>
+        <div id="stats"><span id="velocity">0</span> msg/min</div>
+      </div>
     </div>
+    <div id="bar-area">
+      <div id="bar-track"></div>
+      <div id="bar-glow"></div>
+      <div id="bar-fill"></div>
+      <div id="peak-mark"></div>
+    </div>
+    <div id="bar-ticks"></div>
+    <canvas id="spark" width="640" height="44"></canvas>
   </div>
 
   <div id="topics">
@@ -471,34 +499,16 @@ function toast(html) {
 
 // ============================================================
 // L6 — Render. Meter interpolates toward target (never snaps).
-// Single rAF loop for gauge + particles + sparkline; topics at 1 Hz.
+// Single rAF loop for bar + particles + sparkline; topics at 1 Hz.
 // ============================================================
-const ARC_START = 135, ARC_SWEEP = 270, R = 185, CX = 220, CY = 220;
-function polar(angleDeg, r = R) {
-  const a = (angleDeg - 90) * Math.PI / 180;
-  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
-}
-function arcPath(fromDeg, toDeg) {
-  const [x1, y1] = polar(fromDeg), [x2, y2] = polar(toDeg);
-  const large = toDeg - fromDeg > 180 ? 1 : 0;
-  return `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`;
-}
-document.getElementById('track').setAttribute('d', arcPath(ARC_START, ARC_START + ARC_SWEEP));
 
-// Tick marks every 10 points, longer every 50.
-const ticksEl = document.getElementById('ticks');
+// Tick marks every 10 points along the bar, longer at 0/50/100.
+const ticksEl = document.getElementById('bar-ticks');
 for (let v = 0; v <= 100; v += 10) {
-  const deg = ARC_START + ARC_SWEEP * (v / 100);
-  const major = v % 50 === 0;
-  const [x1, y1] = polar(deg, R - 24);
-  const [x2, y2] = polar(deg, R - (major ? 38 : 32));
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
-  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-  line.setAttribute('stroke', major ? '#3a4a3e' : '#26332a');
-  line.setAttribute('stroke-width', major ? 3 : 2);
-  line.setAttribute('stroke-linecap', 'round');
-  ticksEl.appendChild(line);
+  const tick = document.createElement('span');
+  tick.className = 'tick' + (v % 50 === 0 ? ' major' : '');
+  tick.style.left = v + '%';
+  ticksEl.appendChild(tick);
 }
 
 const TIERS = [
@@ -507,7 +517,7 @@ const TIERS = [
   { min: 70, label: 'ON FIRE' },
 ];
 
-// Colour bands: the gauge blends between these as the score approaches
+// Colour bands: the bar blends between these as the score approaches
 // each engagement band, so the band is readable from colour alone.
 const BAND_COLORS = [
   { v: 0,   c: [ 90, 110, 117] },   // cold — steel grey-blue
@@ -534,9 +544,9 @@ setInterval(() => {
   while (hist.length && hist[0].t < now() - 60) hist.shift();
 }, 250);
 
-// ---- Session-peak marker: a dot parked at the highest score reached ----
+// ---- Session-peak marker: a notch parked at the highest score reached ----
 let peak = 0;
-const peakDotEl = document.getElementById('peakDot');
+const peakEl = document.getElementById('peak-mark');
 
 // ---- Particle embers: cheap canvas, additive blending ----
 const fx = document.getElementById('fx');
@@ -545,10 +555,6 @@ function sizeFx() { fx.width = innerWidth; fx.height = innerHeight; }
 sizeFx();
 addEventListener('resize', sizeFx);
 const particles = [];
-function gaugeCenter() {
-  const r = document.getElementById('gauge').getBoundingClientRect();
-  return [r.left + r.width / 2, r.top + r.height / 2];
-}
 function spawn(x, y, color, speed) {
   if (particles.length > 220) return;
   const a = Math.random() * Math.PI * 2;
@@ -561,13 +567,12 @@ function spawn(x, y, color, speed) {
   });
 }
 function burst(n, color) {
-  // Celebrate around the gauge RING, not over the numeral.
-  const rect = document.getElementById('gauge').getBoundingClientRect();
-  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-  const rad = (rect.width / 440) * R;
+  // Celebrate at the bar's leading edge (where the fill currently ends).
+  const r = document.getElementById('bar-track').getBoundingClientRect();
+  const ex = r.left + r.width * Math.min(100, Math.max(0, displayed)) / 100;
+  const ey = r.top + r.height / 2;
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2;
-    spawn(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, color, 90);
+    spawn(ex + (Math.random() - 0.5) * 30, ey + (Math.random() - 0.5) * r.height, color, 90);
   }
 }
 function stepParticles(dt) {
@@ -619,11 +624,12 @@ function drawSpark(color) {
   sctx.globalAlpha = 1;
 }
 
-const arcEl = document.getElementById('arc');
-const arcGlowEl = document.getElementById('arcGlow');
+const fillEl = document.getElementById('bar-fill');
+const glowEl = document.getElementById('bar-glow');
+const trackEl = document.getElementById('bar-track');
 const scoreEl = document.getElementById('score');
 const tierEl = document.getElementById('tier-label');
-const wrapEl = document.getElementById('gauge-wrap');
+const wrapEl = document.getElementById('meter-wrap');
 const velEl = document.getElementById('velocity');
 
 let tPrev = now();
@@ -633,26 +639,25 @@ function frame() {
   tPrev = t;
 
   displayed += (target - displayed) * 0.06;            // smooth reads as "live"
-  const deg = ARC_START + ARC_SWEEP * (displayed / 100);
-  const d = displayed < 0.5 ? '' : arcPath(ARC_START, deg);
-  arcEl.setAttribute('d', d);
-  arcGlowEl.setAttribute('d', d);
+  const pct = Math.min(100, Math.max(0, displayed));
+  const visible = displayed >= 0.5;
+  fillEl.style.width = pct + '%';
+  glowEl.style.width = pct + '%';
+  fillEl.style.opacity = visible ? 1 : 0;
+  glowEl.style.opacity = visible ? 0.25 + 0.45 * (displayed / 100) : 0;
   scoreEl.innerHTML = `${Math.round(displayed)}<small>/100</small>`;
 
   const col = bandColor(displayed);
-  arcEl.setAttribute('stroke', col);
-  arcGlowEl.setAttribute('stroke', col);
-  arcGlowEl.setAttribute('opacity', 0.25 + 0.45 * (displayed / 100));
+  fillEl.style.background = col;
+  glowEl.style.background = col;
   scoreEl.style.color = col;
   scoreEl.style.textShadow = displayed >= 30 ? `0 0 ${Math.round(displayed / 3)}px ${col}` : 'none';
 
   // session peak marker
   if (displayed > peak) peak = displayed;
   if (peak > 1) {
-    const [px, py] = polar(ARC_START + ARC_SWEEP * (peak / 100));
-    peakDotEl.setAttribute('cx', px);
-    peakDotEl.setAttribute('cy', py);
-    peakDotEl.setAttribute('opacity', 0.9);
+    peakEl.style.left = Math.min(100, peak) + '%';
+    peakEl.style.opacity = 0.9;
   }
 
   const tier = TIERS.filter(x => displayed >= x.min).pop();
@@ -660,12 +665,12 @@ function frame() {
   tierEl.style.color = col;
   wrapEl.classList.toggle('tier2', displayed >= 70);
 
-  // embers rise off the gauge while ON FIRE
+  // embers rise off the filled portion while ON FIRE, biased to the leading edge
   if (displayed >= 70 && Math.random() < (displayed - 65) / 60) {
-    const [cx, cy] = gaugeCenter();
-    const a = ARC_START + Math.random() * ARC_SWEEP * (displayed / 100);
-    const [ox, oy] = polar(a);
-    spawn(cx + (ox - CX), cy + (oy - CY), col, 30);
+    const r = trackEl.getBoundingClientRect();
+    const edge = r.left + r.width * (pct / 100);
+    const x = r.left + (edge - r.left) * (0.35 + 0.65 * Math.random());
+    spawn(x, r.top + 2, col, 30);
   }
   stepParticles(dt);
   drawSpark(col);
