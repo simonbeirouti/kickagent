@@ -4,6 +4,9 @@ export const OVERLAY_COLUMNS = 24;
 export const OVERLAY_ROWS = 14;
 export const MIN_WIDGET_WIDTH = 3;
 export const MIN_WIDGET_HEIGHT = 2;
+// Strip-shaped widgets (the hype bar) may shrink to a single grid row so they
+// can sit as a slim band along the canvas edge.
+export const MIN_SLIM_WIDGET_HEIGHT = 1;
 
 export const widgetKindSchema = z.enum([
   "suggestion",
@@ -11,6 +14,7 @@ export const widgetKindSchema = z.enum([
   "hype",
   "prediction",
   "actionBet",
+  "hypeBar",
   "goals",
   "leaderboard",
   "battle",
@@ -21,6 +25,10 @@ export const widgetKindSchema = z.enum([
   "pulse",
 ]);
 export type WidgetKind = z.infer<typeof widgetKindSchema>;
+
+export function minWidgetHeight(kind: WidgetKind): number {
+  return kind === "hypeBar" ? MIN_SLIM_WIDGET_HEIGHT : MIN_WIDGET_HEIGHT;
+}
 export const managedScreenSchema = z.enum(["glasses", "phone", "public"]);
 export type ManagedScreen = z.infer<typeof managedScreenSchema>;
 
@@ -31,7 +39,7 @@ export const MAX_WIDGET_LABEL_LENGTH = 48;
 
 export const widgetPlacementSchema = z
   .object({
-    height: z.number().int().min(MIN_WIDGET_HEIGHT).max(OVERLAY_ROWS),
+    height: z.number().int().min(MIN_SLIM_WIDGET_HEIGHT).max(OVERLAY_ROWS),
     id: z.string().min(1).max(64),
     kind: widgetKindSchema,
     // Streamer-set display title; widgets fall back to their standard label.
@@ -40,6 +48,7 @@ export const widgetPlacementSchema = z
     x: z.number().int().min(0).max(OVERLAY_COLUMNS - 1),
     y: z.number().int().min(0).max(OVERLAY_ROWS - 1),
   })
+  .refine((item) => item.height >= minWidgetHeight(item.kind), "Widget is too short for its kind.")
   .refine((item) => item.x + item.width <= OVERLAY_COLUMNS, "Widget exceeds canvas width.")
   .refine((item) => item.y + item.height <= OVERLAY_ROWS, "Widget exceeds canvas height.");
 
@@ -78,6 +87,8 @@ export const WIDGET_DEFAULTS: Readonly<Record<WidgetKind, WidgetPlacement>> = {
   emotes: { height: 8, id: "emotes", kind: "emotes", width: 6, x: 0, y: 3 },
   goals: { height: 6, id: "goals", kind: "goals", width: 8, x: 0, y: 0 },
   hype: { height: 5, id: "hype", kind: "hype", width: 8, x: 16, y: 8 },
+  // Slim strip pinned to the top edge — one row tall, roughly 60% canvas wide.
+  hypeBar: { height: 1, id: "hypeBar", kind: "hypeBar", width: 14, x: 5, y: 0 },
   jar: { height: 7, id: "jar", kind: "jar", width: 5, x: 10, y: 4 },
   leaderboard: { height: 7, id: "leaderboard", kind: "leaderboard", width: 7, x: 16, y: 0 },
   prediction: { height: 7, id: "prediction", kind: "prediction", width: 9, x: 0, y: 7 },

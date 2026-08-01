@@ -4,6 +4,10 @@ import {
   managedScreenSchema,
   MAX_WIDGET_LABEL_LENGTH,
   MAX_WIDGETS,
+  MIN_SLIM_WIDGET_HEIGHT,
+  MIN_WIDGET_HEIGHT,
+  minWidgetHeight,
+  OVERLAY_COLUMNS,
   overlayLayoutSchema,
   parseOverlayLayout,
   parseScreenLayouts,
@@ -46,6 +50,34 @@ describe("overlay layout", () => {
     for (const screen of managedScreenSchema.options) {
       expect(parsed[screen]?.map((item) => item.kind)).toEqual([...widgetKindSchema.options]);
     }
+  });
+
+  it("includes the slim hype bar kind with a wide top-edge default", () => {
+    expect(widgetKindSchema.options).toContain("hypeBar");
+    const hypeBar = WIDGET_DEFAULTS.hypeBar;
+    expect(hypeBar.y).toBe(0);
+    expect(hypeBar.height).toBe(MIN_SLIM_WIDGET_HEIGHT);
+    // Defaults to roughly 60% of the canvas width, centred.
+    expect(hypeBar.width / OVERLAY_COLUMNS).toBeCloseTo(0.6, 1);
+    expect(hypeBar.x).toBe(Math.floor((OVERLAY_COLUMNS - hypeBar.width) / 2));
+  });
+
+  it("lets only strip widgets shrink to a single row", () => {
+    expect(minWidgetHeight("hypeBar")).toBe(MIN_SLIM_WIDGET_HEIGHT);
+    expect(minWidgetHeight("hype")).toBe(MIN_WIDGET_HEIGHT);
+    expect(
+      widgetPlacementSchema.safeParse({ ...WIDGET_DEFAULTS.hypeBar, height: 1 }).success,
+    ).toBe(true);
+    expect(
+      widgetPlacementSchema.safeParse({ ...WIDGET_DEFAULTS.hypeBar, height: 0 }).success,
+    ).toBe(false);
+    // Card widgets keep the original two-row minimum.
+    expect(
+      widgetPlacementSchema.safeParse({ ...WIDGET_DEFAULTS.hype, height: 1 }).success,
+    ).toBe(false);
+    expect(
+      overlayLayoutSchema.safeParse([{ ...WIDGET_DEFAULTS.chat, height: 1 }]).success,
+    ).toBe(false);
   });
 
   it("round-trips a custom widget label and rejects invalid ones", () => {

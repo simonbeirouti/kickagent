@@ -26,6 +26,7 @@ import {
   BossWidget,
   EmoteWallWidget,
   GoalsWidget,
+  HypeBarWidget,
   JarWidget,
   LeaderboardWidget,
   PredictionWidget,
@@ -33,8 +34,8 @@ import {
   WidgetHeader,
 } from "@/app/_components/overlay-widgets";
 import {
-  MIN_WIDGET_HEIGHT,
   MIN_WIDGET_WIDTH,
+  minWidgetHeight,
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
   WIDGET_DEFAULTS,
@@ -61,6 +62,7 @@ export const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
   emotes: "Emote wall",
   goals: "Stream goals",
   hype: "Agent energy",
+  hypeBar: "Hype bar",
   jar: "Support jar",
   leaderboard: "Top supporters",
   prediction: "Prediction",
@@ -77,6 +79,7 @@ const WIDGET_ICONS: Readonly<Record<WidgetKind, typeof SparklesIcon>> = {
   emotes: SmilePlusIcon,
   goals: TargetIcon,
   hype: ActivityIcon,
+  hypeBar: ZapIcon,
   jar: CoinsIcon,
   leaderboard: CrownIcon,
   prediction: TrophyIcon,
@@ -124,7 +127,7 @@ export function OverlayCanvas({
     );
     const height = clamp(
       Math.round(((event.clientY - bounds.top) / bounds.height) * OVERLAY_ROWS) - placement.y,
-      MIN_WIDGET_HEIGHT,
+      minWidgetHeight(placement.kind),
       OVERLAY_ROWS - placement.y,
     );
     if (width === placement.width && height === placement.height) return;
@@ -255,6 +258,7 @@ function WidgetContent({
   if (kind === "prediction") return <PredictionWidget label={label} state={state} />;
   if (kind === "actionBet") return <ActionBetWidget label={label} state={state} />;
   if (kind === "goals") return <GoalsWidget label={label} state={state} />;
+  if (kind === "hypeBar") return <HypeBarWidget label={label} state={state} />;
   if (kind === "leaderboard") return <LeaderboardWidget label={label} state={state} />;
   if (kind === "battle") return <BattleWidget label={label} state={state} />;
   if (kind === "boss") return <BossWidget label={label} state={state} />;
