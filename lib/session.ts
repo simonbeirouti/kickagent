@@ -1,19 +1,36 @@
 import { query } from "@/lib/db";
 import { optionalEnv } from "@/lib/env";
 import type { KickChannel, KickProfile } from "@/lib/kick/oauth";
+import type { OverlayLayout } from "@/lib/overlay-layout";
 import { decryptJson, encryptJson, randomToken, sha256 } from "@/lib/security";
 
 export const SESSION_COOKIE = "kickagent_session";
 export const OAUTH_COOKIE = "kickagent_oauth";
 const SESSION_DAYS = 30;
-const STATELESS_SESSION_VERSION = 1;
+const STATELESS_SESSION_VERSION = 2;
+const OVERLAY_ACCESS_VERSION = 1;
 
 export interface StatelessKickSession {
+  readonly accessToken: string;
   readonly channel: KickChannel;
   readonly expiresAt: number;
   readonly profile: KickProfile;
   readonly version: typeof STATELESS_SESSION_VERSION;
 }
+
+export type OverlayAccess =
+  | {
+      readonly connectionId: string;
+      readonly kind: "connection";
+      readonly version: typeof OVERLAY_ACCESS_VERSION;
+      readonly workflowGeneration: number;
+    }
+  | {
+      readonly kind: "stateless";
+      readonly layout: OverlayLayout;
+      readonly session: StatelessKickSession;
+      readonly version: typeof OVERLAY_ACCESS_VERSION;
+    };
 
 interface SessionRow extends Record<string, unknown> {
   readonly connection_id: string;
@@ -34,6 +51,7 @@ export async function createAppSession(connectionId: string): Promise<{
 }
 
 export function createStatelessAppSession(input: {
+  readonly accessToken: string;
   readonly channel: KickChannel;
   readonly profile: KickProfile;
 }): { readonly expiresAt: Date; readonly token: string } {
@@ -46,6 +64,46 @@ export function createStatelessAppSession(input: {
   return { expiresAt, token };
 }
 
+export function createOverlayAccessToken(
+  input:
+    | { readonly connectionId: string; readonly workflowGeneration: number }
+    | { readonly layout: OverlayLayout; readonly session: StatelessKickSession },
+): string {
+  return encryptJson<OverlayAccess>(
+    "session" in input
+      ? {
+          kind: "stateless",
+          layout: input.layout,
+          session: input.session,
+          version: OVERLAY_ACCESS_VERSION,
+        }
+      : {
+          connectionId: input.connectionId,
+          kind: "connection",
+          version: OVERLAY_ACCESS_VERSION,
+          workflowGeneration: input.workflowGeneration,
+        },
+  );
+}
+
+export function overlayAccessFromRequest(request: Request): OverlayAccess | undefined {
+  const token = new URL(request.url).searchParams.get("token");
+  if (!token) return undefined;
+  try {
+    const access = decryptJson<OverlayAccess>(token);
+    if (access.version !== OVERLAY_ACCESS_VERSION) return undefined;
+    if (access.kind === "connection") {
+      return access.connectionId && Number.isInteger(access.workflowGeneration) ? access : undefined;
+    }
+    if (access.kind === "stateless") {
+      return validStatelessSession(access.session) ? access : undefined;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function statelessKickMode(): boolean {
   return optionalEnv("KICK_STATELESS_MODE")?.toLowerCase() === "true";
 }
@@ -56,18 +114,20 @@ export function statelessSessionFromRequest(request: Request): StatelessKickSess
   if (!token) return undefined;
   try {
     const session = decryptJson<StatelessKickSession>(token);
-    if (
-      session.version !== STATELESS_SESSION_VERSION ||
-      session.expiresAt <= Date.now() ||
-      !session.profile?.userId ||
-      !session.channel?.slug
-    ) {
-      return undefined;
-    }
-    return session;
+    return validStatelessSession(session) ? session : undefined;
   } catch {
     return undefined;
   }
+}
+
+function validStatelessSession(session: StatelessKickSession): boolean {
+  return (
+    session?.version === STATELESS_SESSION_VERSION &&
+    session.expiresAt > Date.now() &&
+    Boolean(session.accessToken) &&
+    Boolean(session.profile?.userId) &&
+    Boolean(session.channel?.slug)
+  );
 }
 
 export async function connectionIdFromRequest(request: Request): Promise<string | undefined> {

@@ -23,8 +23,8 @@ Copy `.env.example` to `.env.local` and set:
 - `APP_URL`: canonical deployment origin, without a trailing slash.
 - `DATABASE_URL`: direct Supabase Postgres connection string with SSL enabled.
 - `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET`: credentials from the Kick developer app.
-- `KICK_STATELESS_MODE`: testing-only mode that completes Kick OAuth and renders the Kick profile
-  without database persistence, event subscriptions, or suggestion workflows.
+- `KICK_STATELESS_MODE`: profile/layout preview mode only. When enabled, it deliberately disables
+  database persistence, Kick event subscriptions, live-chat ingestion, and suggestion workflows.
 - `TOKEN_ENCRYPTION_KEY`: at least 32 random characters; encrypts Kick access and refresh tokens.
 - `EVE_INTERNAL_AUTH_SECRET`: at least 32 random characters; signs workflow-to-eve JWTs.
 - `ANTHROPIC_API_KEY`: Anthropic API key used by both eve agents for direct model calls.
@@ -55,4 +55,11 @@ npm run build
 ```
 
 The home page is cookie-authenticated. OAuth tokens remain encrypted server-side, and the overlay
-never posts to Kick chat.
+never posts to Kick chat or embeds the livestream video. Live status is reconciled with Kick's
+channel API at most once every 10 seconds so a delayed or missed status webhook does not leave the
+dashboard stale.
+
+After connecting, the home page becomes an overlay editor. Drag the predefined widgets around the
+24 × 14 snap grid, then use **Copy OBS URL** and add that URL as a 1920 × 1080 OBS Browser Source.
+The browser-source page has a transparent, fixed-size canvas and uses an encrypted read-only link;
+disconnecting or reconnecting Kick invalidates the link. Treat the copied URL as a secret.

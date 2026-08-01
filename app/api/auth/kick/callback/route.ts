@@ -49,7 +49,9 @@ export async function GET(request: Request): Promise<Response> {
     ]);
     if (!isKickAccountAllowed(profile.userId)) return errorRedirect("account_not_allowed");
     if (statelessKickMode()) {
-      return authenticatedRedirect(createStatelessAppSession({ channel, profile }));
+      return authenticatedRedirect(
+        createStatelessAppSession({ accessToken: token.access_token, channel, profile }),
+      );
     }
     const owner = await findOwnerConnection();
     if (owner && owner.kick_user_id !== profile.userId) return errorRedirect("owner_already_connected");
