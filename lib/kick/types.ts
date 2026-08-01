@@ -98,19 +98,3 @@ export const kickLivestreamMetadataEventSchema = z.object({
     title: z.string().nullable().optional(),
   }),
 });
-
-export const kickSendChatMessageResponseSchema = z.object({
-  data: z.object({
-    is_sent: z.boolean(),
-    message_id: z.string(),
-  }),
-  message: z.string().optional(),
-});
-
-export const suggestionSchema = z.object({
-  basis: z.enum(["chat", "stream_context"]),
-  insight: z.string().trim().min(1).max(140),
-  suggestion: z.string().trim().min(1).max(140),
-});
-
-export type Suggestion = z.infer<typeof suggestionSchema>;

@@ -1,10 +1,14 @@
 import { query } from "@/lib/db";
+import { start } from "workflow/api";
+import { ingestChat } from "@/lib/kick/ingestion";
+import { findConnectionById } from "@/lib/kick/repository";
 import {
   kickChatEventSchema,
   kickLivestreamMetadataEventSchema,
   kickLivestreamStatusEventSchema,
 } from "@/lib/kick/types";
-import { verifyKickWebhook, windowStartFor } from "@/lib/kick/webhook";
+import { verifyKickWebhook } from "@/lib/kick/webhook";
+import { kickMessageSuggestionWorkflow } from "@/workflows/kick-suggestions";
 
 export const runtime = "nodejs";
 
@@ -34,10 +38,37 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    console.info("[kick:webhook] received", {
+      eventMessageId: envelope.eventMessageId,
+      eventType: envelope.eventType,
+    });
     switch (envelope.eventType) {
-      case "chat.message.sent":
-        await ingestChat(envelope.eventMessageId, envelope.eventType, body);
+      case "chat.message.sent": {
+        const outcome = await ingestChat(envelope.eventMessageId, envelope.eventType, body);
+        const event = kickChatEventSchema.parse(body);
+        console.info("[kick:chat] ingested", {
+          connectionId: outcome.connectionId,
+          inserted: outcome.inserted,
+          messageCount: outcome.messageCount,
+          messageId: event.message_id,
+          username: event.sender.username ?? "Anonymous",
+        });
+        if (outcome.shouldGenerateSuggestion && outcome.connectionId) {
+          const connection = await findConnectionById(outcome.connectionId);
+          if (connection?.active) {
+            console.info("[suggestion:trigger] queued", {
+              connectionId: connection.id,
+              messageCount: outcome.messageCount,
+              reason: "message_count",
+            });
+            await start(kickMessageSuggestionWorkflow, [
+              connection.id,
+              connection.workflow_generation,
+            ]);
+          }
+        }
         break;
+      }
       case "livestream.status.updated":
         await ingestStatus(envelope.eventMessageId, envelope.eventType, body);
         break;
@@ -50,77 +81,6 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Unable to ingest event.", ok: false }, { status: 400 });
   }
   return Response.json({ ok: true });
-}
-
-async function ingestChat(eventMessageId: string, eventType: string, input: unknown): Promise<void> {
-  const event = kickChatEventSchema.parse(input);
-  const createdAt = new Date(event.created_at);
-  await query(
-    `WITH accepted AS (
-      INSERT INTO kick_webhook_events (event_message_id, event_type)
-      VALUES ($1, $2)
-      ON CONFLICT DO NOTHING
-      RETURNING event_message_id
-    ), matched AS (
-      UPDATE kick_connections
-      SET last_webhook_at = now(), updated_at = now()
-      WHERE kick_user_id = $3 AND EXISTS (SELECT 1 FROM accepted)
-      RETURNING id
-    ), inserted_chat AS (
-    INSERT INTO chat_messages (
-      message_id, event_message_id, connection_id, sender_user_id, sender_username,
-      sender_profile_picture, content, reply_to_message_id, created_at, window_start
-    )
-    SELECT $4, $1, matched.id, $5, $6, $7, $8, $9, $10, $11
-    FROM matched
-    ON CONFLICT DO NOTHING
-    RETURNING
-      connection_id, sender_user_id, sender_username, sender_profile_picture, created_at
-    ), member AS (
-      INSERT INTO community_members (
-        connection_id, kick_user_id, username, profile_picture,
-        first_seen_at, last_seen_at, total_message_count
-      )
-      SELECT
-        connection_id, sender_user_id, sender_username, sender_profile_picture,
-        created_at, created_at, 1
-      FROM inserted_chat
-      WHERE sender_user_id IS NOT NULL
-      ON CONFLICT (connection_id, kick_user_id) DO UPDATE SET
-        username = EXCLUDED.username,
-        profile_picture = COALESCE(EXCLUDED.profile_picture, community_members.profile_picture),
-        last_seen_at = GREATEST(community_members.last_seen_at, EXCLUDED.last_seen_at),
-        total_message_count = community_members.total_message_count + 1,
-        updated_at = now()
-      RETURNING id, connection_id, last_seen_at
-    )
-    INSERT INTO community_member_activity (
-      connection_id, member_id, activity_date, message_count, first_message_at, last_message_at
-    )
-    SELECT connection_id, id, last_seen_at::date, 1, last_seen_at, last_seen_at
-    FROM member
-    ON CONFLICT (connection_id, member_id, activity_date) DO UPDATE SET
-      message_count = community_member_activity.message_count + 1,
-      first_message_at = LEAST(
-        community_member_activity.first_message_at, EXCLUDED.first_message_at
-      ),
-      last_message_at = GREATEST(
-        community_member_activity.last_message_at, EXCLUDED.last_message_at
-      )`,
-    [
-      eventMessageId,
-      eventType,
-      event.broadcaster.user_id,
-      event.message_id,
-      event.sender.user_id ?? null,
-      event.sender.username ?? "Anonymous",
-      event.sender.profile_picture ?? null,
-      event.content,
-      event.replies_to?.message_id ?? null,
-      createdAt.toISOString(),
-      windowStartFor(createdAt).toISOString(),
-    ],
-  );
 }
 
 async function ingestStatus(eventMessageId: string, eventType: string, input: unknown): Promise<void> {

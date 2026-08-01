@@ -47,6 +47,18 @@ ALTER TABLE kick_connections
   ]'::jsonb;
 
 -- statement-breakpoint
+ALTER TABLE kick_connections
+  ADD COLUMN IF NOT EXISTS screen_layouts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS suggestion_message_count integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS suggestion_next_at timestamptz NOT NULL DEFAULT (now() + interval '30 seconds'),
+  ADD COLUMN IF NOT EXISTS suggestion_window_start timestamptz NOT NULL DEFAULT now();
+
+-- statement-breakpoint
+UPDATE kick_connections
+SET screen_layouts = jsonb_build_object('public', overlay_layout)
+WHERE screen_layouts = '{}'::jsonb;
+
+-- statement-breakpoint
 CREATE TABLE IF NOT EXISTS kick_webhook_events (
   event_message_id text PRIMARY KEY,
   event_type text NOT NULL,
@@ -84,11 +96,23 @@ CREATE TABLE IF NOT EXISTS analysis_windows (
   status text NOT NULL CHECK (status IN ('processing', 'complete', 'failed')),
   suggestion text,
   basis text CHECK (basis IN ('chat', 'stream_context')),
+  summary text,
+  topics jsonb NOT NULL DEFAULT '[]'::jsonb,
+  hype_score integer CHECK (hype_score BETWEEN 0 AND 100),
   error text,
   generated_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (connection_id, window_start)
 );
+
+-- statement-breakpoint
+ALTER TABLE analysis_windows ADD COLUMN IF NOT EXISTS summary text;
+
+-- statement-breakpoint
+ALTER TABLE analysis_windows ADD COLUMN IF NOT EXISTS topics jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- statement-breakpoint
+ALTER TABLE analysis_windows ADD COLUMN IF NOT EXISTS hype_score integer;
 
 -- statement-breakpoint
 CREATE INDEX IF NOT EXISTS analysis_windows_latest_idx

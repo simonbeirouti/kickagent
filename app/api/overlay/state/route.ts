@@ -1,8 +1,15 @@
 import { query } from "@/lib/db";
-import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
 import { getKickChannel } from "@/lib/kick/oauth";
-import { findConnectionById, refreshKickChannelIfStale } from "@/lib/kick/repository";
-import { DEFAULT_OVERLAY_LAYOUT, parseOverlayLayout } from "@/lib/overlay-layout";
+import {
+  findConnectionById,
+  findOwnerConnection,
+  refreshKickChannelIfStale,
+} from "@/lib/kick/repository";
+import {
+  DEFAULT_OVERLAY_LAYOUT,
+  parseOverlayLayout,
+  parseScreenLayouts,
+} from "@/lib/overlay-layout";
 import {
   connectionIdFromRequest,
   overlayAccessFromRequest,
@@ -12,10 +19,6 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-// Same trailing lookback workflows/kick-suggestions.ts replays per tick: must
-// comfortably exceed HypeEngine's 45s warm-up so `ready` means a locked baseline.
-const HYPE_LOOKBACK_MS = 3 * 60_000;
 
 interface MessageRow extends Record<string, unknown> {
   readonly content: string;
@@ -27,16 +30,23 @@ interface MessageRow extends Record<string, unknown> {
 interface AnalysisRow extends Record<string, unknown> {
   readonly basis: "chat" | "stream_context" | null;
   readonly generated_at: string | null;
+  readonly hype_score: number | null;
   readonly status: "processing" | "complete" | "failed";
   readonly suggestion: string | null;
+  readonly summary: string | null;
+  readonly topics: unknown;
   readonly window_start: string;
 }
 
 export async function GET(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
+  const publicOverlay = requestUrl.searchParams.get("public") === "overlay";
   const syncKick = requestUrl.searchParams.get("sync") === "kick";
   const overlayAccess = overlayAccessFromRequest(request);
-  if (statelessKickMode()) {
+  // The public overlay is backed by the persisted owner connection and must not
+  // depend on the viewer's session cookie, even when stateless dashboard mode is
+  // enabled for local sign-in/previewing.
+  if (statelessKickMode() && !publicOverlay) {
     const session =
       overlayAccess?.kind === "stateless"
         ? overlayAccess.session
@@ -63,32 +73,34 @@ export async function GET(request: Request): Promise<Response> {
           streamTitle: channel.streamTitle ?? null,
         },
         connected: true,
-        // Stateless mode is a profile/layout preview with no chat ingestion,
-        // so the hype engine has no input to replay. Ship a sample score so
-        // the layout canvas looks real; hypeReady=false + ingestionEnabled=
-        // false let the widget label it as preview data.
-        hypeReady: false,
-        hypeScore: 72,
-        hypeTrend: "steady",
+        hypeScore: 0,
         ingestionEnabled: false,
         live: channel.isLive,
         layout:
           overlayAccess?.kind === "stateless" ? overlayAccess.layout : DEFAULT_OVERLAY_LAYOUT,
         messages: [],
+        screenLayouts: {
+          public: overlayAccess?.kind === "stateless"
+            ? overlayAccess.layout
+            : DEFAULT_OVERLAY_LAYOUT,
+        },
         suggestion: null,
+        summary: null,
         updatedAt: new Date().toISOString(),
       },
       { headers: noStoreHeaders() },
     );
   }
-  const connectionId =
-    overlayAccess?.kind === "connection"
+  const publicConnection = publicOverlay ? await findOwnerConnection() : undefined;
+  const connectionId = publicConnection
+    ? publicConnection.id
+    : overlayAccess?.kind === "connection"
       ? overlayAccess.connectionId
       : await connectionIdFromRequest(request);
   if (!connectionId) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
   }
-  let connection = await findConnectionById(connectionId);
+  let connection = publicConnection ?? (await findConnectionById(connectionId));
   if (!connection || !connection.active) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
   }
@@ -105,8 +117,7 @@ export async function GET(request: Request): Promise<Response> {
       console.error("Failed to refresh Kick channel state", error);
     }
   }
-  const asOf = Date.now();
-  const [messageRows, completedRows, latestRows, hypeRows] = await Promise.all([
+  const [messageRows, completedRows, latestRows] = await Promise.all([
     query<MessageRow>(
       `SELECT message_id, sender_username, content, created_at
        FROM chat_messages WHERE connection_id = $1
@@ -114,28 +125,20 @@ export async function GET(request: Request): Promise<Response> {
       [connectionId],
     ),
     query<AnalysisRow>(
-      `SELECT window_start, status, suggestion, basis, generated_at
+      `SELECT window_start, status, suggestion, basis, summary, topics, hype_score, generated_at
        FROM analysis_windows
        WHERE connection_id = $1 AND status = 'complete'
        ORDER BY window_start DESC LIMIT 1`,
       [connectionId],
     ),
     query<AnalysisRow>(
-      `SELECT window_start, status, suggestion, basis, generated_at
+      `SELECT window_start, status, suggestion, basis, summary, topics, hype_score, generated_at
        FROM analysis_windows
        WHERE connection_id = $1
        ORDER BY window_start DESC LIMIT 1`,
       [connectionId],
     ),
-    query<HypeChatRow>(
-      `SELECT message_id, sender_user_id::text, sender_username, content, created_at
-       FROM chat_messages
-       WHERE connection_id = $1 AND created_at >= $2
-       ORDER BY created_at ASC`,
-      [connectionId, new Date(asOf - HYPE_LOOKBACK_MS).toISOString()],
-    ),
   ]);
-  const hype = computeHypeSnapshot(hypeRows, asOf);
   const suggestion = completedRows[0];
   const latest = latestRows[0];
   const generatedAt = suggestion?.generated_at ? new Date(suggestion.generated_at).getTime() : 0;
@@ -153,9 +156,7 @@ export async function GET(request: Request): Promise<Response> {
         streamTitle: connection.stream_title,
       },
       connected: connection.active,
-      hypeReady: hype.ready,
-      hypeScore: hype.score,
-      hypeTrend: hype.trend,
+      hypeScore: suggestion?.hype_score ?? 0,
       ingestionEnabled: true,
       live: connection.is_live,
       layout: parseOverlayLayout(connection.overlay_layout),
@@ -165,6 +166,10 @@ export async function GET(request: Request): Promise<Response> {
         id: message.message_id,
         username: message.sender_username,
       })),
+      screenLayouts: parseScreenLayouts(
+        connection.screen_layouts,
+        parseOverlayLayout(connection.overlay_layout),
+      ),
       suggestion: suggestion
         ? {
             basis: suggestion.basis,
@@ -173,10 +178,31 @@ export async function GET(request: Request): Promise<Response> {
             text: suggestion.suggestion,
           }
         : null,
+      summary: suggestion?.summary
+        ? {
+            generatedAt: suggestion.generated_at,
+            stale,
+            text: suggestion.summary,
+            topics: parseTopics(suggestion.topics),
+          }
+        : null,
       updatedAt: new Date().toISOString(),
     },
     { headers: noStoreHeaders() },
   );
+}
+
+function parseTopics(value: unknown): { label: string; percentage: number }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((topic) => {
+    if (!topic || typeof topic !== "object") return [];
+    const candidate = topic as Record<string, unknown>;
+    if (typeof candidate.label !== "string" || typeof candidate.percentage !== "number") return [];
+    return [{
+      label: candidate.label.slice(0, 48),
+      percentage: Math.max(0, Math.min(100, Math.round(candidate.percentage))),
+    }];
+  }).slice(0, 3);
 }
 
 function noStoreHeaders(): HeadersInit {

@@ -1,32 +1,31 @@
-import { Client } from "eve/client";
 import { sleep } from "workflow";
 import { cleanupExpiredData as deleteExpiredData } from "@/lib/cleanup";
 import { appUrl } from "@/lib/env";
 import { query } from "@/lib/db";
-import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
 import { findConnectionById } from "@/lib/kick/repository";
-import { suggestionSchema, type Suggestion } from "@/lib/kick/types";
-import { nextWindow } from "@/lib/kick/webhook";
 import { signInternalJwt } from "@/lib/security";
-import { buildSuggestionPrompt, type PromptChatMessage } from "@/lib/suggestions";
-
-// Trailing lookback the hype engine replays each tick to compute its signal. Must
-// comfortably exceed HypeEngine's default 45s warm-up so `ready` reflects a locked
-// baseline rather than the workflow step's own cold start.
-const HYPE_LOOKBACK_MS = 3 * 60_000;
+import {
+  suggestionGenerationResponseSchema,
+  type PromptChatMessage,
+  type SuggestionGenerationRequest,
+} from "@/lib/suggestions";
 
 interface WindowPlan {
-  readonly end: string;
-  readonly start: string;
+  readonly dueAt: string;
   readonly stop: boolean;
+}
+
+type TriggerReason = "message_count" | "timer";
+
+interface TriggerClaim extends Record<string, unknown> {
+  readonly window_end: string;
+  readonly window_start: string;
 }
 
 interface ChatRow extends Record<string, unknown> {
   readonly content: string;
   readonly created_at: string;
   readonly message_id: string;
-  readonly sender_profile_picture: string | null;
-  readonly sender_user_id: string | null;
   readonly sender_username: string;
 }
 
@@ -38,17 +37,6 @@ interface ExistingWindowRow extends Record<string, unknown> {
   readonly status: string;
 }
 
-const outputSchema = {
-  additionalProperties: false,
-  properties: {
-    basis: { enum: ["chat", "stream_context"], type: "string" },
-    insight: { maxLength: 140, minLength: 1, type: "string" },
-    suggestion: { maxLength: 140, minLength: 1, type: "string" },
-  },
-  required: ["suggestion", "basis", "insight"],
-  type: "object",
-} as const;
-
 export async function kickSuggestionWorkflow(
   connectionId: string,
   generation: number,
@@ -57,27 +45,95 @@ export async function kickSuggestionWorkflow(
 
   let completedTicks = 0;
   while (true) {
-    const plan = await planNextWindow(connectionId, generation);
+    const plan = await planNextTrigger(connectionId, generation);
     if (plan.stop) return;
-    await sleep(new Date(plan.end));
-    try {
-      await analyzeWindow(connectionId, generation, plan.start, plan.end);
-    } catch (error) {
-      await markWindowFailed(connectionId, plan.start, plan.end, String(error));
+    await sleep(new Date(plan.dueAt));
+    const claim = await claimSuggestionTrigger(connectionId, generation, "timer");
+    if (claim) {
+      await runClaimedAnalysis(connectionId, generation, claim, "timer");
     }
     completedTicks += 1;
     if (completedTicks % 2_880 === 0) await cleanupExpiredData(connectionId);
   }
 }
 
-async function planNextWindow(connectionId: string, generation: number): Promise<WindowPlan> {
+export async function kickMessageSuggestionWorkflow(
+  connectionId: string,
+  generation: number,
+): Promise<void> {
+  "use workflow";
+
+  const claim = await claimSuggestionTrigger(connectionId, generation, "message_count");
+  if (claim) await runClaimedAnalysis(connectionId, generation, claim, "message_count");
+}
+
+async function runClaimedAnalysis(
+  connectionId: string,
+  generation: number,
+  claim: TriggerClaim,
+  reason: TriggerReason,
+): Promise<void> {
+  try {
+    await analyzeWindow(
+      connectionId,
+      generation,
+      claim.window_start,
+      claim.window_end,
+      reason,
+    );
+  } catch (error) {
+    await markWindowFailed(connectionId, claim.window_start, claim.window_end, String(error));
+  }
+}
+
+async function planNextTrigger(connectionId: string, generation: number): Promise<WindowPlan> {
   "use step";
   const connection = await findConnectionById(connectionId);
   if (!connection || !connection.active || connection.workflow_generation !== generation) {
-    return { end: new Date().toISOString(), start: new Date().toISOString(), stop: true };
+    return { dueAt: new Date().toISOString(), stop: true };
   }
-  const window = nextWindow(new Date());
-  return { end: window.end.toISOString(), start: window.start.toISOString(), stop: false };
+  return { dueAt: connection.suggestion_next_at, stop: false };
+}
+
+async function claimSuggestionTrigger(
+  connectionId: string,
+  generation: number,
+  reason: TriggerReason,
+): Promise<TriggerClaim | undefined> {
+  "use step";
+  const rows = await query<TriggerClaim>(
+    `WITH candidate AS (
+       SELECT suggestion_window_start AS window_start
+       FROM kick_connections
+       WHERE id = $1 AND active = true AND workflow_generation = $2
+         AND (
+           ($3 = 'timer' AND suggestion_next_at <= now()) OR
+           ($3 = 'message_count' AND suggestion_message_count >= 5)
+         )
+       FOR UPDATE
+     ), claimed AS (
+       UPDATE kick_connections AS connection SET
+         suggestion_message_count = 0,
+         suggestion_window_start = clock_timestamp(),
+         suggestion_next_at = clock_timestamp() + interval '30 seconds',
+         updated_at = now()
+       FROM candidate
+       WHERE connection.id = $1
+       RETURNING candidate.window_start, connection.suggestion_window_start AS window_end
+     )
+     SELECT window_start, window_end FROM claimed`,
+    [connectionId, generation, reason],
+  );
+  const claim = rows[0];
+  if (claim) {
+    console.info("[suggestion:trigger] claimed", {
+      connectionId,
+      reason,
+      windowEnd: claim.window_end,
+      windowStart: claim.window_start,
+    });
+  }
+  return claim;
 }
 
 async function analyzeWindow(
@@ -85,13 +141,13 @@ async function analyzeWindow(
   generation: number,
   windowStart: string,
   windowEnd: string,
+  reason: TriggerReason,
 ): Promise<void> {
   "use step";
   const connection = await findConnectionById(connectionId);
   if (
     !connection ||
     !connection.active ||
-    !connection.is_live ||
     connection.workflow_generation !== generation
   ) {
     return;
@@ -110,25 +166,13 @@ async function analyzeWindow(
     [connectionId, windowStart, windowEnd],
   );
 
-  const windowEndMs = new Date(windowEnd).getTime();
-  const [windowRows, recentRows, recentSuggestionRows, hypeLookbackRows] = await Promise.all([
+  const [cachedRows, recentSuggestionRows] = await Promise.all([
     query<ChatRow>(
-      `SELECT
-         message_id, sender_user_id::text, sender_username, sender_profile_picture,
-         content, created_at
+      `SELECT message_id, sender_username, content, created_at
        FROM chat_messages
-       WHERE connection_id = $1 AND created_at >= $2 AND created_at < $3
-       ORDER BY created_at ASC`,
-      [connectionId, windowStart, windowEnd],
-    ),
-    query<ChatRow>(
-      `SELECT
-         message_id, sender_user_id::text, sender_username, sender_profile_picture,
-         content, created_at
-       FROM chat_messages
-       WHERE connection_id = $1 AND created_at < $2
-       ORDER BY created_at DESC LIMIT 10`,
-      [connectionId, windowStart],
+       WHERE connection_id = $1
+       ORDER BY created_at DESC, ingested_at DESC LIMIT 5`,
+      [connectionId],
     ),
     query<SuggestionRow>(
       `SELECT suggestion FROM analysis_windows
@@ -136,49 +180,60 @@ async function analyzeWindow(
        ORDER BY window_start DESC LIMIT 4`,
       [connectionId],
     ),
-    query<HypeChatRow>(
-      `SELECT message_id, sender_user_id::text, sender_username, content, created_at
-       FROM chat_messages
-       WHERE connection_id = $1 AND created_at >= $2 AND created_at < $3
-       ORDER BY created_at ASC`,
-      [connectionId, new Date(windowEndMs - HYPE_LOOKBACK_MS).toISOString(), windowEnd],
-    ),
   ]);
-  const hype = computeHypeSnapshot(hypeLookbackRows, windowEndMs);
-  const prompt = buildSuggestionPrompt({
+  const suggestionRequest: SuggestionGenerationRequest = {
     categoryName: connection.category_name ?? undefined,
-    hype,
-    recentChat: recentRows.reverse().map(toPromptMessage),
+    messages: cachedRows.reverse().map(toPromptMessage),
     recentSuggestions: recentSuggestionRows.map((row) => row.suggestion),
     streamTitle: connection.stream_title ?? undefined,
-    windowChat: windowRows.map(toPromptMessage),
+  };
+  console.info("[suggestion:analysis] requesting", {
+    connectionId,
+    messageCount: cachedRows.length,
+    messageIds: cachedRows.map((row) => row.message_id),
+    reason,
+    windowEnd,
+    windowStart,
   });
-  const suggestion = await requestSuggestion(connectionId, prompt);
-  // `insight` isn't persisted yet — analysis_windows has no column for it. It's
-  // logged so the hype-aware read is visible in workflow run logs until the
-  // overlay is wired to show it.
-  console.info(
-    `[kick-suggestions] connection=${connectionId} window=${windowStart} hype=${hype.score} insight=${JSON.stringify(suggestion.insight)}`,
-  );
+  const startedAt = Date.now();
+  const statement = await requestSuggestion(connectionId, suggestionRequest);
+  const basis = suggestionRequest.messages.length > 0 ? "chat" : "stream_context";
+  console.info("[suggestion:analysis] completed", {
+    basis,
+    connectionId,
+    durationMs: Date.now() - startedAt,
+    messageIds: cachedRows.map((row) => row.message_id),
+    reason,
+    windowEnd,
+    windowStart,
+  });
   await query(
     `UPDATE analysis_windows SET
-      status = 'complete', suggestion = $4, basis = $5, error = NULL,
+      status = 'complete', suggestion = $4, basis = $5, summary = NULL,
+      topics = '[]'::jsonb, hype_score = NULL, error = NULL,
       generated_at = now(), updated_at = now()
      WHERE connection_id = $1 AND window_start = $2 AND window_end = $3`,
-    [connectionId, windowStart, windowEnd, suggestion.suggestion, suggestion.basis],
+    [connectionId, windowStart, windowEnd, statement, basis],
   );
 }
 
-async function requestSuggestion(connectionId: string, prompt: string): Promise<Suggestion> {
-  const client = new Client({
-    auth: { bearer: signInternalJwt(connectionId) },
-    host: `${appUrl()}/eve/agents/suggester`,
+async function requestSuggestion(
+  connectionId: string,
+  input: SuggestionGenerationRequest,
+): Promise<string> {
+  const response = await fetch(`${appUrl()}/api/internal/suggestions/generate`, {
+    body: JSON.stringify(input),
+    headers: {
+      authorization: `Bearer ${signInternalJwt(connectionId)}`,
+      "content-type": "application/json",
+    },
+    method: "POST",
     redirect: "error",
   });
-  const response = await client.session().send<Suggestion>({ message: prompt, outputSchema });
-  const result = await response.result();
-  if (result.status === "failed" || !result.data) throw new Error("Suggestion agent failed.");
-  return suggestionSchema.parse(result.data);
+  if (!response.ok) {
+    throw new Error(`Suggestion endpoint returned HTTP ${response.status}.`);
+  }
+  return suggestionGenerationResponseSchema.parse(await response.json()).statement;
 }
 
 async function markWindowFailed(
@@ -207,9 +262,6 @@ function toPromptMessage(row: ChatRow): PromptChatMessage {
   return {
     content: row.content,
     createdAt: row.created_at,
-    messageId: row.message_id,
-    profilePicture: row.sender_profile_picture ?? undefined,
-    senderUserId: row.sender_user_id ?? undefined,
     username: row.sender_username,
   };
 }
