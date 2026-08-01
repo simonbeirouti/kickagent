@@ -91,7 +91,6 @@ async function analyzeWindow(
   if (
     !connection ||
     !connection.active ||
-    !connection.is_live ||
     connection.workflow_generation !== generation
   ) {
     return;
@@ -111,24 +110,15 @@ async function analyzeWindow(
   );
 
   const windowEndMs = new Date(windowEnd).getTime();
-  const [windowRows, recentRows, recentSuggestionRows, hypeLookbackRows] = await Promise.all([
+  const [cachedRows, recentSuggestionRows, hypeLookbackRows] = await Promise.all([
     query<ChatRow>(
       `SELECT
          message_id, sender_user_id::text, sender_username, sender_profile_picture,
          content, created_at
        FROM chat_messages
-       WHERE connection_id = $1 AND created_at >= $2 AND created_at < $3
-       ORDER BY created_at ASC`,
-      [connectionId, windowStart, windowEnd],
-    ),
-    query<ChatRow>(
-      `SELECT
-         message_id, sender_user_id::text, sender_username, sender_profile_picture,
-         content, created_at
-       FROM chat_messages
-       WHERE connection_id = $1 AND created_at < $2
-       ORDER BY created_at DESC LIMIT 10`,
-      [connectionId, windowStart],
+       WHERE connection_id = $1
+       ORDER BY created_at DESC, ingested_at DESC LIMIT 5`,
+      [connectionId],
     ),
     query<SuggestionRow>(
       `SELECT suggestion FROM analysis_windows
@@ -148,10 +138,10 @@ async function analyzeWindow(
   const prompt = buildSuggestionPrompt({
     categoryName: connection.category_name ?? undefined,
     hype,
-    recentChat: recentRows.reverse().map(toPromptMessage),
+    recentChat: [],
     recentSuggestions: recentSuggestionRows.map((row) => row.suggestion),
     streamTitle: connection.stream_title ?? undefined,
-    windowChat: windowRows.map(toPromptMessage),
+    windowChat: cachedRows.reverse().map(toPromptMessage),
   });
   const suggestion = await requestSuggestion(connectionId, prompt);
   // `insight` isn't persisted yet — analysis_windows has no column for it. It's

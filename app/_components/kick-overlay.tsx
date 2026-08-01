@@ -2,9 +2,7 @@
 
 import {
   ActivityIcon,
-  CheckIcon,
   Clock3Icon,
-  CopyIcon,
   GripVerticalIcon,
   LogOutIcon,
   MessageCircleIcon,
@@ -15,6 +13,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
+import { DashboardContentManager } from "@/app/_components/dashboard-content-manager";
+import {
+  publishDemoOverlayState,
+  readDemoOverlayState,
+  subscribeToDemoOverlayState,
+} from "@/lib/demo-overlay-store";
 import {
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
@@ -23,37 +27,7 @@ import {
   type WidgetKind,
   type WidgetPlacement,
 } from "@/lib/overlay-layout";
-
-interface OverlayState {
-  readonly authenticated: true;
-  readonly channel: {
-    readonly category: string | null;
-    readonly displayName: string;
-    readonly profilePicture: string | null;
-    readonly slug: string;
-    readonly streamTitle: string | null;
-  };
-  readonly connected: boolean;
-  readonly hypeReady: boolean;
-  readonly hypeScore: number;
-  readonly hypeTrend: "falling" | "rising" | "steady";
-  readonly ingestionEnabled: boolean;
-  readonly layout: OverlayLayout;
-  readonly live: boolean;
-  readonly messages: readonly {
-    readonly content: string;
-    readonly createdAt: string;
-    readonly id: string;
-    readonly username: string;
-  }[];
-  readonly suggestion: {
-    readonly basis: "chat" | "stream_context" | null;
-    readonly generatedAt: string;
-    readonly stale: boolean;
-    readonly text: string;
-  } | null;
-  readonly updatedAt: string;
-}
+import type { OverlayState } from "@/lib/overlay-state";
 
 interface DragPayload {
   readonly id?: string;
@@ -70,9 +44,11 @@ const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
 
 export function KickOverlay({
   accessToken,
+  demoMode = false,
   publicMode = false,
 }: {
   readonly accessToken?: string;
+  readonly demoMode?: boolean;
   readonly publicMode?: boolean;
 }) {
   const [state, setState] = useState<OverlayState>();
@@ -80,8 +56,6 @@ export function KickOverlay({
   const [authenticated, setAuthenticated] = useState<boolean>();
   const [error, setError] = useState<string>();
   const [disconnecting, setDisconnecting] = useState(false);
-  const [copying, setCopying] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
   const refresh = useCallback(
@@ -89,7 +63,9 @@ export function KickOverlay({
       try {
         const search = new URLSearchParams();
         if (accessToken) search.set("token", accessToken);
-        if (syncKick) search.set("sync", "kick");
+        else if (publicMode) search.set("public", "overlay");
+        if (demoMode) search.set("demo", "1");
+        if (syncKick && !demoMode) search.set("sync", "kick");
         const response = await fetch(`/api/overlay/state?${search}`, { cache: "no-store" });
         if (response.status === 401) {
           setAuthenticated(false);
@@ -97,7 +73,8 @@ export function KickOverlay({
           return;
         }
         if (!response.ok) throw new Error("Overlay update failed.");
-        const next = (await response.json()) as OverlayState;
+        const received = (await response.json()) as OverlayState;
+        const next = demoMode ? readDemoOverlayState(received) : received;
         setState(next);
         if (!publicMode) setDraftLayout((current) => current ?? next.layout);
         setAuthenticated(true);
@@ -106,7 +83,7 @@ export function KickOverlay({
         setError(cause instanceof Error ? cause.message : "Overlay update failed.");
       }
     },
-    [accessToken, publicMode],
+    [accessToken, demoMode, publicMode],
   );
 
   useEffect(() => {
@@ -121,9 +98,24 @@ export function KickOverlay({
     return () => window.clearInterval(timer);
   }, [publicMode, refresh]);
 
+  useEffect(() => {
+    if (!demoMode) return;
+    return subscribeToDemoOverlayState((next) => {
+      setState(next);
+      setDraftLayout(next.layout);
+      setAuthenticated(true);
+    });
+  }, [demoMode]);
+
   const saveLayout = async (layout: OverlayLayout) => {
     setDraftLayout(layout);
     setSaveState("saving");
+    if (demoMode) {
+      if (state) setState(publishDemoOverlayState({ ...state, layout }));
+      setSaveState("saved");
+      window.setTimeout(() => setSaveState("idle"), 1_500);
+      return;
+    }
     try {
       const response = await fetch("/api/overlay/layout", {
         body: JSON.stringify(layout),
@@ -136,27 +128,6 @@ export function KickOverlay({
     } catch (cause) {
       setSaveState("idle");
       setError(cause instanceof Error ? cause.message : "Could not save the overlay layout.");
-    }
-  };
-
-  const copyObsUrl = async () => {
-    setCopying(true);
-    try {
-      const response = await fetch("/api/overlay/access", {
-        body: JSON.stringify({ layout: draftLayout }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("Could not create the OBS URL.");
-      const result = (await response.json()) as { readonly url: string };
-      await navigator.clipboard.writeText(result.url);
-      setCopied(true);
-      setError(undefined);
-      window.setTimeout(() => setCopied(false), 2_000);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not create the OBS URL.");
-    } finally {
-      setCopying(false);
     }
   };
 
@@ -182,7 +153,11 @@ export function KickOverlay({
   if (publicMode) {
     return (
       <main className="public-overlay-shell">
-        <OverlayCanvas layout={state.layout} publicMode state={state} />
+        <OverlayCanvas
+          layout={state.layout}
+          publicMode
+          state={state}
+        />
       </main>
     );
   }
@@ -204,90 +179,116 @@ export function KickOverlay({
         </div>
         <div className="header-actions">
           <StatusPill live={state.live} />
-          <button
-            className="obs-link-button"
-            disabled={copying}
-            onClick={() => void copyObsUrl()}
-            type="button"
-          >
-            {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
-            {copied ? "Copied" : copying ? "Creating…" : "Copy OBS URL"}
-          </button>
-          <button
-            aria-label="Disconnect Kick"
-            className="icon-button"
-            disabled={disconnecting}
-            onClick={() => void disconnect()}
-            type="button"
-          >
-            <LogOutIcon size={17} />
-          </button>
+          {demoMode ? <span className="demo-pill">No auth · Demo data</span> : null}
+          {!demoMode ? (
+            <button
+              aria-label="Disconnect Kick"
+              className="icon-button"
+              disabled={disconnecting}
+              onClick={() => void disconnect()}
+              type="button"
+            >
+              <LogOutIcon size={17} />
+            </button>
+          ) : null}
         </div>
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <div className="editor-layout">
-        <aside className="widget-library">
-          <div>
-            <p className="eyebrow">Widgets</p>
-            <h2>Build your screen</h2>
-            <p className="library-copy">Drag a widget onto the canvas, then place it where you want.</p>
-          </div>
-          <div className="library-list">
-            {(["suggestion", "chat", "hype"] as const).map((kind) => {
-              const added = layout.some((item) => item.kind === kind);
-              return (
-                <button
-                  className="library-widget"
-                  disabled={added}
-                  draggable={!added}
-                  key={kind}
-                  onClick={() => {
-                    if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
-                  }}
-                  onDragStart={(event) => startLibraryDrag(event, kind)}
-                  type="button"
-                >
-                  <WidgetKindIcon kind={kind} />
-                  <span>{WIDGET_LABELS[kind]}</span>
-                  <GripVerticalIcon className="library-grip" size={16} />
-                </button>
-              );
-            })}
-          </div>
-          <p className="save-indicator" aria-live="polite">
-            {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
-          </p>
-        </aside>
-
-        <section className="canvas-panel">
-          <div className="canvas-heading">
-            <div>
-              <p className="eyebrow">Browser source preview</p>
-              <h2>1920 × 1080</h2>
+      {demoMode ? (
+        <DashboardContentManager
+          onChange={(next) => setState(publishDemoOverlayState(next))}
+          publicEditor={(
+            <div className="editor-layout manager-public-editor">
+              <WidgetLibrary layout={layout} saveLayout={saveLayout} saveState={saveState} />
+              <section className="canvas-panel">
+                <div className="canvas-heading">
+                  <div>
+                    <p className="eyebrow">Edit widgets directly</p>
+                    <h2>1920 × 1080</h2>
+                  </div>
+                  <span>Drag to reposition</span>
+                </div>
+                <OverlayCanvas
+                  layout={layout}
+                  onLayoutChange={(next) => void saveLayout(next)}
+                  onStateChange={(next) => setState(publishDemoOverlayState(next))}
+                  state={state}
+                />
+              </section>
             </div>
-            <span>Drag to reposition</span>
-          </div>
-          <OverlayCanvas
-            layout={layout}
-            onLayoutChange={(next) => void saveLayout(next)}
-            state={state}
-          />
-        </section>
-      </div>
+          )}
+          state={state}
+        />
+      ) : (
+        <div className="editor-layout">
+          <WidgetLibrary layout={layout} saveLayout={saveLayout} saveState={saveState} />
+          <section className="canvas-panel">
+            <div className="canvas-heading"><h2>1920 × 1080</h2><span>Drag to reposition</span></div>
+            <OverlayCanvas layout={layout} onLayoutChange={(next) => void saveLayout(next)} state={state} />
+          </section>
+        </div>
+      )}
     </main>
+  );
+}
+
+function WidgetLibrary({
+  layout,
+  saveLayout,
+  saveState,
+}: {
+  readonly layout: OverlayLayout;
+  readonly saveLayout: (layout: OverlayLayout) => Promise<void>;
+  readonly saveState: "idle" | "saving" | "saved";
+}) {
+  return (
+    <aside className="widget-library">
+      <div>
+        <p className="eyebrow">Widgets</p>
+        <h2>Build your screen</h2>
+        <p className="library-copy">Add a widget, then edit it directly on the canvas.</p>
+      </div>
+      <div className="library-list">
+        {(["suggestion", "chat", "hype"] as const).map((kind) => {
+          const added = layout.some((item) => item.kind === kind);
+          return (
+            <button
+              className="library-widget"
+              disabled={added}
+              draggable={!added}
+              key={kind}
+              onClick={() => {
+                if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
+              }}
+              onDragStart={(event) => startLibraryDrag(event, kind)}
+              type="button"
+            >
+              <WidgetKindIcon kind={kind} />
+              <span>{WIDGET_LABELS[kind]}</span>
+              <GripVerticalIcon className="library-grip" size={16} />
+            </button>
+          );
+        })}
+      </div>
+      <p className="save-indicator" aria-live="polite">
+        {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
+      </p>
+    </aside>
   );
 }
 
 function OverlayCanvas({
   layout,
   onLayoutChange,
+  onStateChange,
   publicMode = false,
   state,
 }: {
   readonly layout: OverlayLayout;
   readonly onLayoutChange?: (layout: OverlayLayout) => void;
+  readonly onStateChange?: (state: OverlayState) => void;
   readonly publicMode?: boolean;
   readonly state: OverlayState;
 }) {
@@ -340,7 +341,12 @@ function OverlayCanvas({
               <Trash2Icon size={13} />
             </button>
           ) : null}
-          <WidgetContent kind={placement.kind} state={state} />
+          <WidgetContent
+            editable={Boolean(onStateChange)}
+            kind={placement.kind}
+            onStateChange={onStateChange}
+            state={state}
+          />
         </article>
       ))}
       {!publicMode && layout.length === 0 ? (
@@ -353,17 +359,79 @@ function OverlayCanvas({
   );
 }
 
-function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly state: OverlayState }) {
+function WidgetContent({
+  editable,
+  kind,
+  onStateChange,
+  state,
+}: {
+  readonly editable: boolean;
+  readonly kind: WidgetKind;
+  readonly onStateChange?: (state: OverlayState) => void;
+  readonly state: OverlayState;
+}) {
+  const labels = state.surfaceContent?.widgetLabels;
+  const updateLabel = (
+    key: keyof NonNullable<OverlayState["surfaceContent"]>["widgetLabels"],
+    value: string,
+  ) => {
+    if (!state.surfaceContent) return;
+    onStateChange?.({
+      ...state,
+      surfaceContent: {
+        ...state.surfaceContent,
+        widgetLabels: { ...state.surfaceContent.widgetLabels, [key]: value },
+      },
+    });
+  };
+
   if (kind === "suggestion") {
     return (
       <div className="canvas-widget-inner suggestion-canvas-widget">
-        <WidgetHeader icon={<SparklesIcon size={17} />} label="Next talking point">
+        <WidgetHeader
+          icon={<SparklesIcon size={17} />}
+          label={editable ? (
+            <EditableWidgetText
+              ariaLabel="Public suggestion widget title"
+              onChange={(value) => updateLabel("publicSuggestion", value)}
+              value={labels?.publicSuggestion ?? ""}
+            />
+          ) : labels?.publicSuggestion ?? "Next talking point"}
+        >
           <Freshness generatedAt={state.suggestion?.generatedAt} stale={state.suggestion?.stale} />
         </WidgetHeader>
-        <div className="suggestion-content"><p>{suggestionText(state)}</p></div>
+        <div className="suggestion-content">
+          {editable ? (
+            <textarea
+              aria-label="Public talking point"
+              className="public-widget-prompt-input"
+              onChange={(event) => onStateChange?.({
+                ...state,
+                suggestion: state.suggestion
+                  ? { ...state.suggestion, text: event.target.value }
+                  : null,
+              })}
+              value={suggestionText(state)}
+            />
+          ) : <p>{suggestionText(state)}</p>}
+        </div>
         <footer className="widget-footer">
-          <span>{state.channel.streamTitle || "No stream title"}</span>
-          <span>{state.channel.category || "No category"}</span>
+          {editable ? (
+            <>
+              <EditableWidgetText
+                ariaLabel="Public stream title"
+                onChange={(value) => onStateChange?.({ ...state, channel: { ...state.channel, streamTitle: value } })}
+                value={state.channel.streamTitle ?? ""}
+              />
+              <EditableWidgetText
+                ariaLabel="Public category"
+                onChange={(value) => onStateChange?.({ ...state, channel: { ...state.channel, category: value } })}
+                value={state.channel.category ?? ""}
+              />
+            </>
+          ) : (
+            <><span>{state.channel.streamTitle || "No stream title"}</span><span>{state.channel.category || "No category"}</span></>
+          )}
         </footer>
       </div>
     );
@@ -371,16 +439,47 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
   if (kind === "chat") {
     return (
       <div className="canvas-widget-inner chat-canvas-widget">
-        <WidgetHeader icon={<MessageCircleIcon size={17} />} label="Latest chat">
+        <WidgetHeader
+          icon={<MessageCircleIcon size={17} />}
+          label={editable ? (
+            <EditableWidgetText
+              ariaLabel="Public chat widget title"
+              onChange={(value) => updateLabel("publicChat", value)}
+              value={labels?.publicChat ?? ""}
+            />
+          ) : labels?.publicChat ?? "Latest chat"}
+        >
           <span className="count-badge">{state.messages.length}/5</span>
         </WidgetHeader>
         <div className="message-list">
           {state.messages.length === 0 ? (
-            <div className="empty-messages"><RadioIcon size={20} /><span>Listening for chat…</span></div>
-          ) : state.messages.map((message) => (
+            <div className="empty-messages"><RadioIcon size={20} /></div>
+          ) : state.messages.map((message, index) => (
             <div className="chat-message" key={message.id}>
-              <span className="chat-user">{message.username}</span>
-              <span className="chat-copy">{message.content}</span>
+              {editable ? (
+                <>
+                  <EditableWidgetText
+                    ariaLabel={`Public chat username ${index + 1}`}
+                    className="chat-user"
+                    onChange={(value) => onStateChange?.({
+                      ...state,
+                      messages: state.messages.map((item, itemIndex) => itemIndex === index ? { ...item, username: value } : item),
+                    })}
+                    value={message.username}
+                  />
+                  <EditableWidgetText
+                    ariaLabel={`Public chat message ${index + 1}`}
+                    className="chat-copy"
+                    onChange={(value) => onStateChange?.({
+                      ...state,
+                      messages: state.messages.map((item, itemIndex) => itemIndex === index ? { ...item, content: value } : item),
+                    })}
+                    value={message.content}
+                  />
+                </>
+              ) : (
+                <><span className="chat-user">{message.username}</span><span className="chat-copy">{message.content}</span></>
+              )}
               <time>{relativeTime(message.createdAt)}</time>
             </div>
           ))}
@@ -390,7 +489,16 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
   }
   return (
     <div className="canvas-widget-inner hype-canvas-widget">
-      <WidgetHeader icon={<ActivityIcon size={17} />} label="Hype score">
+      <WidgetHeader
+        icon={<ActivityIcon size={17} />}
+        label={editable ? (
+          <EditableWidgetText
+            ariaLabel="Public hype widget title"
+            onChange={(value) => updateLabel("publicHype", value)}
+            value={labels?.publicHype ?? ""}
+          />
+        ) : labels?.publicHype ?? "Hype score"}
+      >
         <span className="preview-badge">
           {!state.ingestionEnabled ? "Preview" : state.hypeReady ? "Live" : "Calibrating"}
         </span>
@@ -401,7 +509,18 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
           className="hype-ring"
           style={{ "--hype": `${state.hypeScore * 3.6}deg` } as CSSProperties}
         >
-          <strong>{state.hypeScore}</strong><span>/ 100</span>
+          {editable ? (
+            <input
+              aria-label="Public hype score"
+              className="hype-score-input"
+              max="100"
+              min="0"
+              onChange={(event) => onStateChange?.({ ...state, hypeScore: Number(event.target.value) })}
+              type="number"
+              value={state.hypeScore}
+            />
+          ) : <strong>{state.hypeScore}</strong>}
+          <span>/ 100</span>
         </div>
         <div className="hype-copy"><ZapIcon size={18} /><span>{hypeLabel(state)}</span></div>
       </div>
@@ -409,8 +528,30 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
   );
 }
 
-function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: string }) {
+function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: ReactNode }) {
   return <header className="widget-header"><span className="widget-title">{icon}{label}</span>{children}</header>;
+}
+
+function EditableWidgetText({
+  ariaLabel,
+  className,
+  onChange,
+  value,
+}: {
+  readonly ariaLabel: string;
+  readonly className?: string;
+  readonly onChange: (value: string) => void;
+  readonly value: string;
+}) {
+  return (
+    <input
+      aria-label={ariaLabel}
+      className={`editable-widget-text ${className ?? ""}`}
+      onChange={(event) => onChange(event.target.value)}
+      onDragStart={(event) => event.stopPropagation()}
+      value={value}
+    />
+  );
 }
 
 function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
@@ -478,8 +619,7 @@ function hypeLabel(state: OverlayState): string {
 
 function suggestionText(state: OverlayState): string {
   if (state.suggestion?.text) return state.suggestion.text;
-  if (!state.live) return "Go live when you're ready — your next talking point will appear here.";
-  return "Listening to the room and preparing your first talking point…";
+  return "";
 }
 
 function ConnectScreen({ error }: { readonly error?: string }) {
@@ -489,7 +629,7 @@ function ConnectScreen({ error }: { readonly error?: string }) {
 }
 
 function InvalidOverlayScreen() {
-  return <main className="connect-screen"><div className="connect-card invalid-overlay-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Overlay link unavailable.</h1><p className="connect-copy">Copy a fresh OBS URL from the connected companion dashboard.</p></div></main>;
+  return <main className="connect-screen"><div className="connect-card invalid-overlay-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Overlay unavailable.</h1><p className="connect-copy">Connect Kick to publish widgets here.</p></div></main>;
 }
 
 function LoadingScreen() {
