@@ -20,9 +20,16 @@ the signal layer.
 
 ## Running it
 
-Open the HTML file directly in a browser, or add it to OBS as a Browser
-Source pointed at the local file path. It's a static file with no build step,
-independent of the Next.js app for now.
+The HUD file lives at [`public/glasses/hype-glasses-hud.html`](../public/glasses/hype-glasses-hud.html)
+and is exposed by the app at **`/glasses`** ([`app/glasses/page.tsx`](../app/glasses/page.tsx)
+is a thin client page that iframes it and forwards query params through).
+Run the app (`npm run dev`) and point an OBS Browser Source at
+`http://localhost:3000/glasses` instead of a local file path — same HUD,
+same URL params, but now served by the app so it can move to a real deployed
+URL later without changing OBS's config beyond the hostname.
+
+The static file still works fine opened directly for quick iteration without
+running the dev server.
 
 ### URL params
 
