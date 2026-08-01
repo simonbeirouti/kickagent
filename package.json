@@ -7,12 +7,17 @@
     "#evals/*": "./evals/*"
   },
   "scripts": {
-    "build": "eve build",
-    "dev": "eve dev",
-    "start": "eve start",
+    "build": "eve build && next build --webpack",
+    "db:migrate": "node scripts/migrate.mjs",
+    "dev": "next dev",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.27",
+    "@neondatabase/serverless": "^1.1.0",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@shikijs/core": "^4.1.0",
     "@shikijs/engine-javascript": "^4.1.0",
@@ -40,13 +45,15 @@
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0",
     "use-stick-to-bottom": "^1.1.4",
+    "workflow": "^4.8.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": "24.x"
