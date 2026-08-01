@@ -1,15 +1,11 @@
 "use client";
 
 import {
-  ActivityIcon,
-  ArrowLeftIcon,
   CheckIcon,
   ChevronRightIcon,
-  EyeIcon,
   GlassesIcon,
   LockKeyholeIcon,
   MessageCircleIcon,
-  Mic2Icon,
   RadioIcon,
   ShieldAlertIcon,
   SparklesIcon,
@@ -27,34 +23,31 @@ export function GlassesSurface({ state: initialState }: { readonly state: Overla
   const [cueIndex, setCueIndex] = useState(0);
   const privateContext = state.privateContext;
   const glassesCues = state.surfaceContent?.glassesCues ?? [];
-  const activeCue = glassesCues[cueIndex] ?? state.suggestion?.text ?? "Waiting for a suggestion…";
+  const labels = state.surfaceContent?.widgetLabels;
+  const activeCue = glassesCues[cueIndex] ?? state.suggestion?.text ?? "";
 
   return (
     <main className="glasses-surface">
       <div className="glasses-vignette" aria-hidden />
       <header className="glasses-topbar">
-        <a aria-label="Back to dashboard" className="surface-back" href="/">
-          <ArrowLeftIcon size={15} />
-          Studio
-        </a>
-        <span className="glasses-mode"><GlassesIcon size={15} /> Glasses preview</span>
-        <span className="glasses-live"><i /> LIVE · 42:18</span>
+        <span className="glasses-mode"><GlassesIcon size={15} /> {state.channel.displayName}</span>
+        <span className="glasses-live"><i /> {state.live ? "Live" : "Offline"}</span>
       </header>
 
       <section aria-label="Private information" className="glasses-private-card">
-        <div className="glasses-card-label"><LockKeyholeIcon size={14} /> Only you can see this</div>
-        <strong>{privateContext?.headline ?? "Private stream context"}</strong>
-        <p>{privateContext?.notes[0] ?? "Your private notes will appear here."}</p>
+        <div className="glasses-card-label"><LockKeyholeIcon size={14} /> {labels?.glassesPrivate}</div>
+        <strong>{privateContext?.headline ?? ""}</strong>
+        <p>{privateContext?.notes[0] ?? ""}</p>
       </section>
 
       <section aria-live="polite" className="glasses-cue-card">
         <div className="glasses-cue-meta">
-          <span><SparklesIcon size={16} /> Agent suggestion</span>
-          <span className="glasses-listening"><i /> Listening</span>
+          <span><SparklesIcon size={16} /> {labels?.glassesSuggestion}</span>
+          <span className="glasses-listening"><i /> {state.connected ? "Connected" : "Disconnected"}</span>
         </div>
         <p>{activeCue}</p>
         <footer>
-          <span>Based on live chat</span>
+          <span>{suggestionBasis(state)}</span>
           <button
             onClick={() => setCueIndex((current) => (current + 1) % Math.max(1, glassesCues.length))}
             type="button"
@@ -65,11 +58,6 @@ export function GlassesSurface({ state: initialState }: { readonly state: Overla
       </section>
 
       <div className="glasses-reticle" aria-hidden><span /></div>
-      <div className="glasses-bottom-status">
-        <span><Mic2Icon size={14} /> Voice active</span>
-        <span><EyeIcon size={14} /> Private display</span>
-        <span><ActivityIcon size={14} /> Hype {state.hypeScore}</span>
-      </div>
     </main>
   );
 }
@@ -79,26 +67,26 @@ export function StreamerPhoneSurface({ state: initialState }: { readonly state: 
   const [panel, setPanel] = useState<PhonePanel>("brief");
   const [suggestionUsed, setSuggestionUsed] = useState(false);
   const privateContext = state.privateContext;
+  const labels = state.surfaceContent?.widgetLabels;
 
   return (
     <main className="phone-demo-stage">
-      <a className="phone-stage-back" href="/"><ArrowLeftIcon size={15} /> Back to studio</a>
       <div className="phone-device">
         <div className="phone-island" aria-hidden />
         <div className="phone-screen">
           <header className="phone-header">
             <div className="phone-channel">
               <span className="phone-avatar">K</span>
-              <span><small>Live companion</small><strong>{state.channel.displayName}</strong></span>
+              <span><small>{state.channel.streamTitle}</small><strong>{state.channel.displayName}</strong></span>
             </div>
-            <span className="phone-live"><i /> Live</span>
+            <span className="phone-live"><i /> {state.live ? "Live" : "Offline"}</span>
           </header>
 
           <section className="phone-pulse-card">
             <div>
-              <span className="phone-section-label"><RadioIcon size={13} /> Stream pulse</span>
+              <span className="phone-section-label"><RadioIcon size={13} /> {labels?.phonePulse}</span>
               <strong>{state.hypeScore}</strong>
-              <small>High energy</small>
+              <small>{energyLabel(state.hypeScore)}</small>
             </div>
             <div className="phone-pulse-bars" aria-hidden>
               {[38, 62, 46, 82, 56, 95, 72, 48, 68, 88, 54, 76].map((height, index) => (
@@ -128,8 +116,8 @@ export function StreamerPhoneSurface({ state: initialState }: { readonly state: 
               <>
                 <section className="phone-suggestion-card">
                   <div className="phone-card-heading">
-                    <span><SparklesIcon size={15} /> Say this next</span>
-                    <small>Just now</small>
+                    <span><SparklesIcon size={15} /> {labels?.phoneSuggestion}</span>
+                    <small>{relativeTime(state.updatedAt)}</small>
                   </div>
                   <p>{state.suggestion?.text}</p>
                   <button
@@ -141,7 +129,7 @@ export function StreamerPhoneSurface({ state: initialState }: { readonly state: 
                   </button>
                 </section>
                 <section className="phone-topic-card">
-                  <span className="phone-section-label"><ZapIcon size={13} /> Chat is leaning into</span>
+                  <span className="phone-section-label"><ZapIcon size={13} /> {labels?.phoneTopics}</span>
                   {(state.surfaceContent?.phoneTopics ?? []).map((topic, index) => (
                     <div className={index === 0 ? "phone-topic-item" : "phone-topic-item secondary"} key={`${index}-${topic.label}`}>
                       <div className="phone-topic-row"><strong>{topic.label}</strong><span>{topic.percentage}%</span></div>
@@ -154,7 +142,7 @@ export function StreamerPhoneSurface({ state: initialState }: { readonly state: 
 
             {panel === "chat" ? (
               <section className="phone-chat-card">
-                <span className="phone-section-label"><MessageCircleIcon size={13} /> Recent signals</span>
+                <span className="phone-section-label"><MessageCircleIcon size={13} /> {labels?.publicChat}</span>
                 {state.messages.map((message) => (
                   <div className="phone-message" key={message.id}>
                     <span>{message.username.slice(0, 1).toUpperCase()}</span>
@@ -166,7 +154,7 @@ export function StreamerPhoneSurface({ state: initialState }: { readonly state: 
 
             {panel === "notes" ? (
               <section className="phone-notes-card">
-                <span className="phone-section-label"><ShieldAlertIcon size={13} /> Private notes</span>
+                <span className="phone-section-label"><ShieldAlertIcon size={13} /> {labels?.glassesPrivate}</span>
                 <h2>{privateContext?.headline}</h2>
                 <ul>
                   {privateContext?.notes.map((note) => <li key={note}>{note}</li>)}
@@ -176,11 +164,28 @@ export function StreamerPhoneSurface({ state: initialState }: { readonly state: 
           </div>
 
           <footer className="phone-footer">
-            <span><i /> Agent connected</span>
+            <span><i /> {state.connected ? "Connected" : "Disconnected"}</span>
             <span>{state.channel.category}</span>
           </footer>
         </div>
       </div>
     </main>
   );
+}
+
+function suggestionBasis(state: OverlayState): string {
+  if (state.suggestion?.basis === "chat") return "Based on live chat";
+  if (state.suggestion?.basis === "stream_context") return "Based on stream context";
+  return "Waiting for context";
+}
+
+function energyLabel(score: number): string {
+  if (score >= 80) return "High energy";
+  if (score >= 55) return "Building momentum";
+  return "Room is warming up";
+}
+
+function relativeTime(value: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1_000));
+  return seconds < 5 ? "now" : seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m`;
 }

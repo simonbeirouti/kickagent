@@ -359,17 +359,79 @@ function OverlayCanvas({
   );
 }
 
-function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly state: OverlayState }) {
+function WidgetContent({
+  editable,
+  kind,
+  onStateChange,
+  state,
+}: {
+  readonly editable: boolean;
+  readonly kind: WidgetKind;
+  readonly onStateChange?: (state: OverlayState) => void;
+  readonly state: OverlayState;
+}) {
+  const labels = state.surfaceContent?.widgetLabels;
+  const updateLabel = (
+    key: keyof NonNullable<OverlayState["surfaceContent"]>["widgetLabels"],
+    value: string,
+  ) => {
+    if (!state.surfaceContent) return;
+    onStateChange?.({
+      ...state,
+      surfaceContent: {
+        ...state.surfaceContent,
+        widgetLabels: { ...state.surfaceContent.widgetLabels, [key]: value },
+      },
+    });
+  };
+
   if (kind === "suggestion") {
     return (
       <div className="canvas-widget-inner suggestion-canvas-widget">
-        <WidgetHeader icon={<SparklesIcon size={17} />} label="Next talking point">
+        <WidgetHeader
+          icon={<SparklesIcon size={17} />}
+          label={editable ? (
+            <EditableWidgetText
+              ariaLabel="Public suggestion widget title"
+              onChange={(value) => updateLabel("publicSuggestion", value)}
+              value={labels?.publicSuggestion ?? ""}
+            />
+          ) : labels?.publicSuggestion ?? "Next talking point"}
+        >
           <Freshness generatedAt={state.suggestion?.generatedAt} stale={state.suggestion?.stale} />
         </WidgetHeader>
-        <div className="suggestion-content"><p>{suggestionText(state)}</p></div>
+        <div className="suggestion-content">
+          {editable ? (
+            <textarea
+              aria-label="Public talking point"
+              className="public-widget-prompt-input"
+              onChange={(event) => onStateChange?.({
+                ...state,
+                suggestion: state.suggestion
+                  ? { ...state.suggestion, text: event.target.value }
+                  : null,
+              })}
+              value={suggestionText(state)}
+            />
+          ) : <p>{suggestionText(state)}</p>}
+        </div>
         <footer className="widget-footer">
-          <span>{state.channel.streamTitle || "No stream title"}</span>
-          <span>{state.channel.category || "No category"}</span>
+          {editable ? (
+            <>
+              <EditableWidgetText
+                ariaLabel="Public stream title"
+                onChange={(value) => onStateChange?.({ ...state, channel: { ...state.channel, streamTitle: value } })}
+                value={state.channel.streamTitle ?? ""}
+              />
+              <EditableWidgetText
+                ariaLabel="Public category"
+                onChange={(value) => onStateChange?.({ ...state, channel: { ...state.channel, category: value } })}
+                value={state.channel.category ?? ""}
+              />
+            </>
+          ) : (
+            <><span>{state.channel.streamTitle || "No stream title"}</span><span>{state.channel.category || "No category"}</span></>
+          )}
         </footer>
       </div>
     );
@@ -377,16 +439,47 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
   if (kind === "chat") {
     return (
       <div className="canvas-widget-inner chat-canvas-widget">
-        <WidgetHeader icon={<MessageCircleIcon size={17} />} label="Latest chat">
+        <WidgetHeader
+          icon={<MessageCircleIcon size={17} />}
+          label={editable ? (
+            <EditableWidgetText
+              ariaLabel="Public chat widget title"
+              onChange={(value) => updateLabel("publicChat", value)}
+              value={labels?.publicChat ?? ""}
+            />
+          ) : labels?.publicChat ?? "Latest chat"}
+        >
           <span className="count-badge">{state.messages.length}/5</span>
         </WidgetHeader>
         <div className="message-list">
           {state.messages.length === 0 ? (
-            <div className="empty-messages"><RadioIcon size={20} /><span>Listening for chat…</span></div>
-          ) : state.messages.map((message) => (
+            <div className="empty-messages"><RadioIcon size={20} /></div>
+          ) : state.messages.map((message, index) => (
             <div className="chat-message" key={message.id}>
-              <span className="chat-user">{message.username}</span>
-              <span className="chat-copy">{message.content}</span>
+              {editable ? (
+                <>
+                  <EditableWidgetText
+                    ariaLabel={`Public chat username ${index + 1}`}
+                    className="chat-user"
+                    onChange={(value) => onStateChange?.({
+                      ...state,
+                      messages: state.messages.map((item, itemIndex) => itemIndex === index ? { ...item, username: value } : item),
+                    })}
+                    value={message.username}
+                  />
+                  <EditableWidgetText
+                    ariaLabel={`Public chat message ${index + 1}`}
+                    className="chat-copy"
+                    onChange={(value) => onStateChange?.({
+                      ...state,
+                      messages: state.messages.map((item, itemIndex) => itemIndex === index ? { ...item, content: value } : item),
+                    })}
+                    value={message.content}
+                  />
+                </>
+              ) : (
+                <><span className="chat-user">{message.username}</span><span className="chat-copy">{message.content}</span></>
+              )}
               <time>{relativeTime(message.createdAt)}</time>
             </div>
           ))}
@@ -396,8 +489,17 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
   }
   return (
     <div className="canvas-widget-inner hype-canvas-widget">
-      <WidgetHeader icon={<ActivityIcon size={17} />} label="Hype score">
-        <span className="preview-badge">Preview</span>
+      <WidgetHeader
+        icon={<ActivityIcon size={17} />}
+        label={editable ? (
+          <EditableWidgetText
+            ariaLabel="Public hype widget title"
+            onChange={(value) => updateLabel("publicHype", value)}
+            value={labels?.publicHype ?? ""}
+          />
+        ) : labels?.publicHype ?? "Hype score"}
+      >
+        <span className="count-badge">{state.hypeScore}/100</span>
       </WidgetHeader>
       <div className="hype-content">
         <div
@@ -405,42 +507,55 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
           className="hype-ring"
           style={{ "--hype": `${state.hypeScore * 3.6}deg` } as CSSProperties}
         >
-          <strong>{state.hypeScore}</strong><span>/ 100</span>
+          {editable ? (
+            <input
+              aria-label="Public hype score"
+              className="hype-score-input"
+              max="100"
+              min="0"
+              onChange={(event) => onStateChange?.({ ...state, hypeScore: Number(event.target.value) })}
+              type="number"
+              value={state.hypeScore}
+            />
+          ) : <strong>{state.hypeScore}</strong>}
+          <span>/ 100</span>
         </div>
-        <div className="hype-copy"><ZapIcon size={18} /><span>Good energy</span></div>
+        <div className="hype-copy"><ZapIcon size={18} /><span>{energyLabel(state.hypeScore)}</span></div>
       </div>
     </div>
   );
 }
 
-function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: string }) {
+function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: ReactNode }) {
   return <header className="widget-header"><span className="widget-title">{icon}{label}</span>{children}</header>;
+}
+
+function EditableWidgetText({
+  ariaLabel,
+  className,
+  onChange,
+  value,
+}: {
+  readonly ariaLabel: string;
+  readonly className?: string;
+  readonly onChange: (value: string) => void;
+  readonly value: string;
+}) {
+  return (
+    <input
+      aria-label={ariaLabel}
+      className={`editable-widget-text ${className ?? ""}`}
+      onChange={(event) => onChange(event.target.value)}
+      onDragStart={(event) => event.stopPropagation()}
+      value={value}
+    />
+  );
 }
 
 function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
   if (kind === "chat") return <MessageCircleIcon size={17} />;
   if (kind === "hype") return <ActivityIcon size={17} />;
   return <SparklesIcon size={17} />;
-}
-
-function SurfaceLink({
-  description,
-  href,
-  label,
-}: {
-  readonly description: string;
-  readonly href: string;
-  readonly label: string;
-}) {
-  return (
-    <a className="surface-link" href={href} rel="noreferrer" target="_blank">
-      <span>
-        <strong>{label}</strong>
-        <small>{description}</small>
-      </span>
-      <ExternalLinkIcon aria-hidden size={15} />
-    </a>
-  );
 }
 
 function StatusPill({ live }: { readonly live: boolean }) {
@@ -494,8 +609,13 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 function suggestionText(state: OverlayState): string {
   if (state.suggestion?.text) return state.suggestion.text;
-  if (!state.live) return "Go live when you're ready — your next talking point will appear here.";
-  return "Listening to the room and preparing your first talking point…";
+  return "";
+}
+
+function energyLabel(score: number): string {
+  if (score >= 80) return "High energy";
+  if (score >= 55) return "Building momentum";
+  return "Room is warming up";
 }
 
 function ConnectScreen({ error }: { readonly error?: string }) {
