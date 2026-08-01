@@ -1,6 +1,10 @@
 import { query } from "@/lib/db";
 import { findConnectionById } from "@/lib/kick/repository";
-import { connectionIdFromRequest } from "@/lib/session";
+import {
+  connectionIdFromRequest,
+  statelessKickMode,
+  statelessSessionFromRequest,
+} from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +25,31 @@ interface AnalysisRow extends Record<string, unknown> {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  if (statelessKickMode()) {
+    const session = statelessSessionFromRequest(request);
+    if (!session) {
+      return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
+    }
+    return Response.json(
+      {
+        authenticated: true,
+        channel: {
+          category: session.channel.categoryName ?? null,
+          displayName: session.profile.name,
+          profilePicture: session.profile.profilePicture ?? null,
+          slug: session.channel.slug,
+          streamTitle: session.channel.streamTitle ?? null,
+        },
+        connected: true,
+        hypeScore: 72,
+        live: session.channel.isLive,
+        messages: [],
+        suggestion: null,
+        updatedAt: new Date().toISOString(),
+      },
+      { headers: noStoreHeaders() },
+    );
+  }
   const connectionId = await connectionIdFromRequest(request);
   if (!connectionId) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
