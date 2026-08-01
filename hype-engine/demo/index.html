@@ -169,6 +169,18 @@
   .pred-footer { display: flex; gap: 16px; margin-top: 8px; color: var(--muted); font-size: .69rem; }
   .pred-footer strong { color: var(--text); font-variant-numeric: tabular-nums; }
   .pred-readonly { margin-bottom: 8px; color: var(--muted); font-size: .68rem; }
+  #predictionCelebration { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: none; background: transparent; }
+  #predictionCelebration[hidden] { display: none; }
+  @keyframes celebrationMessage { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.55); filter: blur(8px); } 18%, 72% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); } 100% { opacity: 0; transform: translate(-50%, -54%) scale(1.06); } }
+  @keyframes ribbonFall { 0% { opacity: 0; transform: translate3d(0, -15vh, 0) rotate(0deg); } 10% { opacity: 1; } 100% { opacity: 0; transform: translate3d(var(--drift), 115vh, 0) rotate(var(--spin)); } }
+  @keyframes celebrationRay { 0%,100% { opacity: 0; transform: translate(-50%, -50%) scale(.4) rotate(0); } 22%,70% { opacity: .28; transform: translate(-50%, -50%) scale(1) rotate(25deg); } }
+  .celebration-rays { position: absolute; left: 50%; top: 50%; width: min(80vw, 760px); aspect-ratio: 1; border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgb(83 252 24 / 24%) 0 7deg, transparent 7deg 18deg); mask-image: radial-gradient(circle, transparent 0 18%, black 46%, transparent 72%); animation: celebrationRay 2.2s ease both; }
+  .celebration-message { position: absolute; left: 50%; top: 48%; width: min(680px, calc(100vw - 36px)); padding: 22px 28px; border: 1px solid rgb(83 252 24 / 70%); border-radius: 18px; background: rgb(10 16 11 / 62%); backdrop-filter: blur(7px); text-align: center; box-shadow: 0 0 70px rgb(83 252 24 / 26%); animation: celebrationMessage 2.2s ease both; }
+  .celebration-message span { display: block; color: var(--green); font-size: .72rem; font-weight: 900; letter-spacing: .2em; text-transform: uppercase; }
+  .celebration-message strong { display: block; margin: 5px 0; color: var(--text); font-size: clamp(1.7rem, 5vw, 3.5rem); line-height: 1.05; text-shadow: 0 0 28px rgb(83 252 24 / 42%); }
+  .celebration-message small { color: #d6e2d4; font-size: clamp(.8rem, 2vw, 1rem); }
+  .celebration-ribbon { position: absolute; left: var(--x); top: -30px; width: 8px; height: 34px; border-radius: 2px; background: var(--ribbon); animation: ribbonFall var(--duration) cubic-bezier(.2,.7,.35,1) var(--delay) both; }
+  @media (prefers-reduced-motion: reduce) { .celebration-rays,.celebration-message,.celebration-ribbon { animation-duration: .01ms; animation-iteration-count: 1; } }
 
   /* Action bets are a separate viewer proposal surface. */
   #actionBetPopup { position: fixed; right: 14px; bottom: 14px; z-index: 21; width: min(620px, calc(100vw - 28px)); }
@@ -233,6 +245,8 @@
   <button id="spamBtn" class="mock-only">Inject spammer</button>
   <button id="dareBtn">Hit Me, Kick Me</button>
 </header>
+
+<aside id="predictionCelebration" aria-live="assertive" hidden></aside>
 
 <main>
   <div class="col">
@@ -316,6 +330,9 @@ let predictionStake = 50;
 let simulatedVoter = 0;
 let predictionRenderTimer = null;
 let predictionVoteTimer = null;
+let predictionSettlement = null;
+let predictionAnnouncementSent = false;
+let predictionCelebrationTimer = null;
 let actionBetView = 'viewer';
 let actionBet = null;
 let actionBackingStake = 50;
@@ -341,10 +358,15 @@ function openPrediction() {
   prediction = new Prediction({
     question: 'Will Neon hit 13,000 trophies this stream?',
     opensAt: now,
-    locksAt: now + 60_000,
+    locksAt: now + 10_000,
   }, now);
   predictionStake = 50;
   simulatedVoter = 0;
+  predictionSettlement = null;
+  predictionAnnouncementSent = false;
+  clearTimeout(predictionCelebrationTimer);
+  $('predictionCelebration').hidden = true;
+  $('predictionCelebration').innerHTML = '';
   $('predictionPopup').hidden = false;
   renderPrediction();
   clearInterval(predictionRenderTimer);
@@ -366,6 +388,8 @@ function closePrediction() {
   predictionRenderTimer = null;
   predictionVoteTimer = null;
   prediction = null;
+  predictionSettlement = null;
+  predictionAnnouncementSent = false;
   $('predictionPopup').hidden = true;
   $('predictionPopup').innerHTML = '';
 }
@@ -382,6 +406,13 @@ function renderPrediction() {
   const visibleOptions = snapshot.status === 'locked'
     ? snapshot.options.filter((option) => option.points === maxPoints)
     : snapshot.options;
+  if (snapshot.status === 'locked' && !predictionSettlement) {
+    predictionSettlement = prediction.settle(now);
+  }
+  if (predictionSettlement && !predictionAnnouncementSent) {
+    predictionAnnouncementSent = true;
+    announcePredictionSettlement(predictionSettlement);
+  }
 
   $('predictionPopup').innerHTML = `<section class="pred-card">
     <div class="pred-heading">
@@ -408,6 +439,36 @@ function renderPrediction() {
     <footer class="pred-footer"><span>Total pool <strong>${pointsFormat.format(snapshot.totalPoints)} HP</strong></span><span>Participants <strong>${pointsFormat.format(snapshot.participantCount)}</strong></span></footer>
   </section>`;
 
+}
+
+function announcePredictionSettlement(settlement) {
+  const labels = settlement.winners.map((option) => option.label).join(' & ');
+  const viewerWin = settlement.winningViewers.find((viewer) => viewer.viewerId === 'demo-viewer');
+  const count = settlement.winningViewers.length;
+  const title = viewerWin ? 'Congratulations—you won!' : `${escapeHtml(labels)} ${settlement.isTie ? 'tie' : 'wins'}!`;
+  const message = viewerWin
+    ? `${escapeHtml(labels)} ${settlement.isTie ? 'finished tied' : 'won'}. Your winning stake was ${pointsFormat.format(viewerWin.points)} points.`
+    : `Congratulations to ${pointsFormat.format(count)} winning viewer${count === 1 ? '' : 's'}.`;
+  showPredictionCelebration(title, message);
+}
+
+function showPredictionCelebration(title, message) {
+  const colors = ['#53fc18', '#ffb020', '#ff6565', '#4dd2ff', '#f2f5f0'];
+  const ribbons = Array.from({ length: 54 }, (_, index) => {
+    const x = Math.round(Math.random() * 100);
+    const drift = `${Math.round(Math.random() * 180 - 90)}px`;
+    const spin = `${Math.round(400 + Math.random() * 900)}deg`;
+    const duration = `${(1.45 + Math.random() * .75).toFixed(2)}s`;
+    const delay = `${(Math.random() * .45).toFixed(2)}s`;
+    return `<i class="celebration-ribbon" style="--x:${x}%;--drift:${drift};--spin:${spin};--duration:${duration};--delay:${delay};--ribbon:${colors[index % colors.length]}"></i>`;
+  }).join('');
+  $('predictionCelebration').innerHTML = `<div class="celebration-rays"></div>${ribbons}<div class="celebration-message"><span>Prediction settled</span><strong>${title}</strong><small>${message}</small></div>`;
+  $('predictionCelebration').hidden = false;
+  clearTimeout(predictionCelebrationTimer);
+  predictionCelebrationTimer = setTimeout(() => {
+    $('predictionCelebration').hidden = true;
+    $('predictionCelebration').innerHTML = '';
+  }, 2300);
 }
 
 function renderActionBet() {
