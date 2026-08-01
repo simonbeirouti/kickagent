@@ -1,10 +1,6 @@
 "use client";
 
 import {
-  ActivityIcon,
-  FlameIcon,
-  GlassesIcon,
-  LockKeyholeIcon,
   MessageCircleIcon,
   RadioIcon,
   ShieldAlertIcon,
@@ -13,91 +9,338 @@ import {
   UsersIcon,
   ZapIcon,
 } from "lucide-react";
-import { useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createHudEngine, type HudEngine, type HudSnapshot } from "@/lib/glasses-hud-engine";
 import { useLiveOverlayState } from "@/lib/live-overlay-store";
 import type { OverlayState } from "@/lib/overlay-state";
 
 type PhonePanel = "brief" | "chat" | "summary";
 
-function formatMoney(amount: number): string {
-  return `$${Math.round(amount).toLocaleString("en-US")}`;
-}
+const HUD_PANEL_KEYS = ["topbar", "prediction", "active", "predictions", "reticle", "toast"] as const;
+type HudPanelKey = (typeof HUD_PANEL_KEYS)[number];
+
+const HUD_LAYOUT_STORAGE_KEY = "glasses-hud-layout-v1";
 
 export function GlassesSurface() {
-  const liveState = useLiveOverlayState();
-  if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
-  const state = liveState.state;
+  // The simulation engine uses Math.random()/Date.now(), so it must never run
+  // during SSR — creating and ticking it only inside an effect keeps the
+  // server-rendered markup and the first client render identical.
+  const engineRef = useRef<HudEngine | null>(null);
+  const [snapshot, setSnapshot] = useState<HudSnapshot | null>(null);
+  const [hintVisible, setHintVisible] = useState(true);
+  const drag = useDraggableHudPanels();
+  const predictionCardRef = useRef<HTMLElement | null>(null);
+  const activeCardRef = useRef<HTMLElement | null>(null);
+  const activeAmountRef = useRef<HTMLDivElement | null>(null);
+  const previousQuestion = useRef<string | null>(null);
+  const previousBetKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const engine = createHudEngine(3);
+    engineRef.current = engine;
+    setSnapshot(engine.tick(0));
+
+    let frame = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      setSnapshot(engine.tick((now - last) / 1_000));
+      last = now;
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key === "h") { setHintVisible((visible) => !visible); return; }
+      if (key === "l") { drag.toggleEditMode(); return; }
+      if (key === "r" && drag.editMode) { drag.resetLayout(); return; }
+      if (drag.editMode) return;
+      if (key === "n") engineRef.current?.newMarket();
+      if (key === "b") engineRef.current?.newBet();
+      if (key === "t") engineRef.current?.showToast();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drag]);
+
+  useEffect(() => {
+    const question = snapshot?.featured?.question ?? null;
+    if (question && question !== previousQuestion.current && predictionCardRef.current) {
+      flashElement(predictionCardRef.current, "glasses-hud-pop");
+      flashElement(predictionCardRef.current, "glasses-hud-glow");
+    }
+    previousQuestion.current = question;
+  }, [snapshot?.featured?.question]);
+
+  useEffect(() => {
+    const betKey = snapshot?.bet ? `${snapshot.bet.text}|${snapshot.bet.status}` : null;
+    if (betKey && betKey !== previousBetKey.current) {
+      if (activeCardRef.current) flashElement(activeCardRef.current, "glasses-hud-pop");
+      if (activeAmountRef.current) flashElement(activeAmountRef.current, "glasses-hud-bump");
+    }
+    previousBetKey.current = betKey;
+  }, [snapshot?.bet?.status, snapshot?.bet?.text]);
+
+  const toast = snapshot?.toast ?? { copy: "", icon: "⚡", kind: "" as const, title: "", visible: false };
+
+  if (!snapshot) {
+    return (
+      <main className="glasses-hud">
+        <div className="glasses-hud-scanlines" aria-hidden />
+        <div className="glasses-hud-vignette" aria-hidden />
+      </main>
+    );
+  }
+
   return (
-    <main className="glasses-surface">
-      <div className="glasses-vignette" aria-hidden />
-      <header className="glasses-topbar">
-        <span className="glasses-mode"><GlassesIcon size={15} /> {state.channel.displayName}</span>
-        <span className="glasses-live"><i /> {state.live ? "Live" : "Offline"}</span>
+    <main
+      className="glasses-hud"
+      data-hud-edit={drag.editMode || undefined}
+      onDoubleClick={() => {
+        if (drag.editMode) return;
+        if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.();
+        else void document.exitFullscreen?.();
+      }}
+    >
+      <div className="glasses-hud-scanlines" aria-hidden />
+      <div className="glasses-hud-vignette" aria-hidden />
+
+      <header
+        className="glasses-hud-panel glasses-hud-topbar"
+        data-hud-key="topbar"
+        onPointerDown={drag.startDrag("topbar")}
+        ref={drag.ref("topbar")}
+        style={drag.styleFor("topbar")}
+      >
+        <span className="glasses-hud-live"><i /> LIVE HUD</span>
+        <div className="glasses-hud-top-meta">
+          <span>{snapshot.topbar.clock}</span>
+          <span className="glasses-hud-sep" />
+          <span>👁 <b>{snapshot.topbar.viewers.toLocaleString("en-US")}</b></span>
+          <span className="glasses-hud-sep" />
+          <span className={snapshot.topbar.hypeUp ? "glasses-hud-hype" : "glasses-hud-hype down"}>
+            {snapshot.topbar.hypeUp ? "▲" : "▼"} {snapshot.topbar.hype} HYPE
+          </span>
+          <span className="glasses-hud-sep" />
+          <span>AI AGENT ONLINE</span>
+          <div className="glasses-hud-battery"><div className="glasses-hud-battery-fill" style={{ width: `${snapshot.topbar.battery}%` }} /></div>
+        </div>
       </header>
 
-      <section aria-label="Live summary" className="glasses-private-card">
-        <div className="glasses-card-label"><LockKeyholeIcon size={14} /> Live summary</div>
-        <strong>{state.summary?.text ?? "Waiting for the first agent brief…"}</strong>
-        <p>{formatTopics(state.summary?.topics)}</p>
-      </section>
-
-      {state.prediction || state.activeBet ? (
-        <section aria-label="Live prediction market" className="glasses-prediction-card">
-          <div className="glasses-card-label"><TrendingUpIcon size={14} /> Live prediction</div>
-          {state.prediction ? (
-            <>
-              <strong>{state.prediction.question}</strong>
-              <div className="glasses-prediction-split">
-                <div className="glasses-prediction-yes">
-                  <span>YES {state.prediction.yesPercent}%</span>
-                  <small>{formatMoney(state.prediction.yesPool)}</small>
-                </div>
-                <div className="glasses-prediction-no">
-                  <span>NO {100 - state.prediction.yesPercent}%</span>
-                  <small>{formatMoney(state.prediction.noPool)}</small>
-                </div>
-              </div>
-            </>
-          ) : null}
-          {state.activeBet ? (
-            <div className="glasses-prediction-bet">
-              <FlameIcon size={13} /> {state.activeBet.text} · {formatMoney(state.activeBet.amount)} ·{" "}
-              {state.activeBet.status}
+      {snapshot.featured ? (
+        <section
+          className="glasses-hud-panel glasses-hud-prediction"
+          data-hud-key="prediction"
+          onPointerDown={drag.startDrag("prediction")}
+          ref={(element) => { predictionCardRef.current = element; drag.ref("prediction")(element); }}
+          style={drag.styleFor("prediction")}
+        >
+          <div className="glasses-hud-card-head">
+            <span className="glasses-hud-card-head-left">
+              <span className="glasses-hud-check">✓</span>
+              <span className="glasses-hud-label">New prediction</span>
+            </span>
+            <span className="glasses-hud-ago">{snapshot.featured.ago}</span>
+          </div>
+          <div className="glasses-hud-question">{snapshot.featured.question}</div>
+          <div className="glasses-hud-split">
+            <div className="glasses-hud-choice yes">
+              <div className="glasses-hud-choice-title">YES&nbsp; <span>{snapshot.featured.yesPct}%</span></div>
+              <div className="glasses-hud-money">{snapshot.featured.yesPool}</div>
             </div>
-          ) : null}
+            <div className="glasses-hud-choice no">
+              <div className="glasses-hud-choice-title">NO&nbsp; <span>{snapshot.featured.noPct}%</span></div>
+              <div className="glasses-hud-money">{snapshot.featured.noPool}</div>
+            </div>
+          </div>
+          <div className={snapshot.featured.urgent ? "glasses-hud-ends urgent" : "glasses-hud-ends"}>{snapshot.featured.ends}</div>
         </section>
       ) : null}
 
-      <section aria-live="polite" className="glasses-cue-card">
-        <div className="glasses-cue-meta">
-          <span><SparklesIcon size={16} /> Agent suggestion</span>
-          <span className="glasses-listening"><i /> {state.connected ? "Connected" : "Disconnected"}</span>
-        </div>
-        <p>{state.suggestion?.text ?? "Listening for a useful moment…"}</p>
-        <footer>
-          <span>{suggestionBasis(state)}</span>
-          <span>{relativeTime(state.suggestion?.generatedAt ?? state.updatedAt)}</span>
-        </footer>
+      {snapshot.bet ? (
+        <section
+          className={`glasses-hud-panel glasses-hud-active ${snapshot.bet.status}`}
+          data-hud-key="active"
+          onPointerDown={drag.startDrag("active")}
+          ref={(element) => { activeCardRef.current = element; drag.ref("active")(element); }}
+          style={drag.styleFor("active")}
+        >
+          <div className="glasses-hud-card-head">
+            <span className="glasses-hud-card-head-left">
+              <span className="glasses-hud-bet-icon">{snapshot.bet.icon}</span>
+              <span className="glasses-hud-label gold">Bet active</span>
+            </span>
+          </div>
+          <div className="glasses-hud-active-main">
+            <div className="glasses-hud-active-text">{snapshot.bet.text}</div>
+            <div className="glasses-hud-amount" ref={activeAmountRef}>{snapshot.bet.amount}</div>
+          </div>
+          <div className={`glasses-hud-status ${snapshot.bet.status}`}><i />{snapshot.bet.statusText}</div>
+        </section>
+      ) : null}
+
+      <section
+        className="glasses-hud-panel glasses-hud-top-predictions"
+        data-hud-key="predictions"
+        onPointerDown={drag.startDrag("predictions")}
+        ref={drag.ref("predictions")}
+        style={drag.styleFor("predictions")}
+      >
+        <div className="glasses-hud-title">TOP PREDICTIONS</div>
+        {snapshot.topRows.map((row) => (
+          <div className="glasses-hud-pred-row" key={row.id}>
+            <div className="glasses-hud-pred-name"><span className="glasses-hud-icon">{row.icon}</span>{row.name}</div>
+            <div className="glasses-hud-bar-wrap">
+              <div className="glasses-hud-bar"><div className={row.yesPct < 50 ? "glasses-hud-fill red" : "glasses-hud-fill"} style={{ width: `${row.yesPct}%` }} /></div>
+              <div className="glasses-hud-pct">{row.yesPct}%</div>
+            </div>
+            <div className="glasses-hud-small-no">
+              <div className="glasses-hud-mini"><span style={{ width: `${row.noPct}%` }} /></div>
+              <b>NO</b>
+            </div>
+          </div>
+        ))}
+        <button className="glasses-hud-all-btn" type="button">View All {snapshot.totalMarkets} Predictions →</button>
       </section>
 
-      <div className="glasses-reticle" aria-hidden><span /></div>
-      <div className="glasses-bottom-status">
-        <span><ActivityIcon size={14} /> Hype {state.hypeScore}</span>
-        {state.activeBet ? (
-          <span>
-            <FlameIcon size={14} /> Bet {formatMoney(state.activeBet.amount)} · {state.activeBet.status}
-          </span>
-        ) : null}
-      </div>
+      <div
+        className="glasses-hud-reticle"
+        data-hud-key="reticle"
+        onPointerDown={drag.startDrag("reticle")}
+        ref={drag.ref("reticle")}
+        style={drag.styleFor("reticle")}
+      ><span /></div>
+
+      <aside
+        className={`glasses-hud-panel glasses-hud-toast ${toast.kind} ${toast.visible ? "show" : ""}`}
+        data-hud-key="toast"
+        onPointerDown={drag.startDrag("toast")}
+        ref={drag.ref("toast")}
+        style={drag.styleFor("toast")}
+      >
+        <div className="glasses-hud-toast-icon">{toast.icon}</div>
+        {/* Toast copy is built from hardcoded demo templates (lib/glasses-hud-engine.ts), never user input. */}
+        <div>
+          <div className="glasses-hud-toast-title">{toast.title}</div>
+          <div className="glasses-hud-toast-copy" dangerouslySetInnerHTML={{ __html: toast.copy }} />
+        </div>
+      </aside>
+
+      {drag.editMode ? <div className="glasses-hud-layout-badge">Layout edit — drag panels • L to exit • R to reset</div> : null}
+      {hintVisible ? (
+        <div className="glasses-hud-hint">H hide chrome • L move panels • N new prediction • B new bet • T toast • Double-click fullscreen</div>
+      ) : null}
     </main>
   );
 }
 
+interface DraggableHudPanels {
+  readonly editMode: boolean;
+  readonly ref: (key: HudPanelKey) => (element: HTMLElement | null) => void;
+  readonly resetLayout: () => void;
+  readonly startDrag: (key: HudPanelKey) => (event: ReactPointerEvent<HTMLElement>) => void;
+  readonly styleFor: (key: HudPanelKey) => CSSProperties | undefined;
+  readonly toggleEditMode: () => void;
+}
+
+function useDraggableHudPanels(): DraggableHudPanels {
+  const [editMode, setEditMode] = useState(false);
+  const [positions, setPositions] = useState<Partial<Record<HudPanelKey, { left: number; top: number }>>>({});
+  const elements = useRef<Partial<Record<HudPanelKey, HTMLElement>>>({});
+  const dragging = useRef<{ key: HudPanelKey; offsetX: number; offsetY: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(HUD_LAYOUT_STORAGE_KEY);
+      if (stored) setPositions(JSON.parse(stored));
+    } catch {
+      // Ignore malformed saved layout and fall back to the default arrangement.
+    }
+  }, []);
+
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      const current = dragging.current;
+      const el = current ? elements.current[current.key] : undefined;
+      if (!current || !el) return;
+      const x = clampNumber(event.clientX - current.offsetX, -el.offsetWidth * 0.6, window.innerWidth - el.offsetWidth * 0.4);
+      const y = clampNumber(event.clientY - current.offsetY, -el.offsetHeight * 0.6, window.innerHeight - el.offsetHeight * 0.4);
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+    };
+    const onUp = () => {
+      const current = dragging.current;
+      const el = current ? elements.current[current.key] : undefined;
+      if (current && el) {
+        el.dataset.dragging = "false";
+        const rect = el.getBoundingClientRect();
+        setPositions((prev) => {
+          const next = { ...prev, [current.key]: { left: rect.left, top: rect.top } };
+          window.localStorage.setItem(HUD_LAYOUT_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+      }
+      dragging.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+
+  return {
+    editMode,
+    ref: (key) => (element) => {
+      if (element) elements.current[key] = element;
+      else delete elements.current[key];
+    },
+    resetLayout: () => {
+      window.localStorage.removeItem(HUD_LAYOUT_STORAGE_KEY);
+      setPositions({});
+    },
+    startDrag: (key) => (event) => {
+      if (!editMode) return;
+      const el = event.currentTarget;
+      const rect = el.getBoundingClientRect();
+      el.style.left = `${rect.left}px`;
+      el.style.top = `${rect.top}px`;
+      el.style.right = "auto";
+      el.style.bottom = "auto";
+      el.style.transform = "none";
+      el.dataset.dragging = "true";
+      dragging.current = { key, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+      el.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    },
+    styleFor: (key) => {
+      const pos = positions[key];
+      return pos ? { left: pos.left, top: pos.top, right: "auto", bottom: "auto", transform: "none" } : undefined;
+    },
+    toggleEditMode: () => setEditMode((value) => !value),
+  };
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function flashElement(element: HTMLElement, className: string): void {
+  element.classList.remove(className);
+  void element.offsetWidth;
+  element.classList.add(className);
+}
+
 export function StreamerPhoneSurface() {
   const liveState = useLiveOverlayState();
-  const [panel, setPanel] = useState<PhonePanel>("brief");
   if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
   const state = liveState.state;
+  const [panel, setPanel] = useState<PhonePanel>("brief");
   const topics = state.summary?.topics ?? [];
   return (
     <main className="phone-demo-stage">
@@ -205,18 +448,6 @@ function SurfaceStatus({ error }: { readonly error?: string }) {
       </div>
     </main>
   );
-}
-
-function formatTopics(topics: readonly { readonly label: string }[] | undefined): string {
-  return topics && topics.length > 0
-    ? topics.map((topic) => topic.label).join(" · ")
-    : "Waiting for live chat signals";
-}
-
-function suggestionBasis(state: OverlayState): string {
-  if (state.suggestion?.basis === "chat") return "Based on live chat";
-  if (state.suggestion?.basis === "stream_context") return "Based on stream context";
-  return "Waiting for context";
 }
 
 function pulseBars(score: number): number[] {

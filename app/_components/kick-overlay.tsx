@@ -2,23 +2,45 @@
 
 import {
   ActivityIcon,
+  BellRingIcon,
   Clock3Icon,
+  CoinsIcon,
+  CrownIcon,
   ExternalLinkIcon,
+  FlameIcon,
+  GaugeIcon,
   GlassesIcon,
   GripVerticalIcon,
   LogOutIcon,
   MessageCircleIcon,
   MonitorUpIcon,
   RadioIcon,
+  SkullIcon,
   SmartphoneIcon,
+  SmilePlusIcon,
   SparklesIcon,
+  TargetIcon,
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
-import { useState } from "react";
-import type { CSSProperties, DragEvent, ReactNode } from "react";
+import { useRef, useState } from "react";
+import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
+import { GlassesSurface } from "@/app/_components/companion-surfaces";
+import {
+  AlertsWidget,
+  BattleWidget,
+  BossWidget,
+  EmoteWallWidget,
+  GoalsWidget,
+  JarWidget,
+  LeaderboardWidget,
+  PulseWidget,
+  WidgetHeader,
+} from "@/app/_components/overlay-widgets";
 import { useLiveOverlayState } from "@/lib/live-overlay-store";
 import {
+  MIN_WIDGET_HEIGHT,
+  MIN_WIDGET_WIDTH,
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
   WIDGET_DEFAULTS,
@@ -49,10 +71,27 @@ const MANAGED_SCREENS: readonly {
 ];
 
 const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
+  alerts: "Alerts",
+  battle: "Hype battle",
+  boss: "Stream boss",
   chat: "Latest chat",
+  emotes: "Emote wall",
+  goals: "Stream goals",
   hype: "Agent energy",
+  jar: "Support jar",
+  leaderboard: "Top supporters",
+  pulse: "Chat pulse",
   suggestion: "Live brief",
 };
+
+const WIDGET_GROUPS: readonly {
+  readonly kinds: readonly WidgetKind[];
+  readonly label: string;
+}[] = [
+  { kinds: ["suggestion", "chat", "hype"], label: "Agent" },
+  { kinds: ["goals", "leaderboard", "jar", "alerts"], label: "Community" },
+  { kinds: ["battle", "boss", "emotes", "pulse"], label: "Hype & fun" },
+];
 
 export function KickOverlay({
   accessToken,
@@ -166,7 +205,11 @@ export function KickOverlay({
             <span>Drag widgets onto the screen</span>
           </div>
           <div className={`screen-canvas-stage ${selectedScreen}`}>
-            <OverlayCanvas layout={activeLayout} onLayoutChange={(next) => void saveActiveLayout(next)} screen={selectedScreen} state={state} />
+            {selectedScreen === "glasses" ? (
+              <GlassesSurface />
+            ) : (
+              <OverlayCanvas layout={activeLayout} onLayoutChange={(next) => void saveActiveLayout(next)} screen={selectedScreen} state={state} />
+            )}
           </div>
         </section>
       </div>
@@ -190,27 +233,34 @@ function WidgetLibrary({
         <h2>Build your screen</h2>
         <p className="library-copy">Choose the live widgets to show, then position them on the canvas.</p>
       </div>
-      <div className="library-list">
-        {(["suggestion", "chat", "hype"] as const).map((kind) => {
-          const added = layout.some((item) => item.kind === kind);
-          return (
-            <button
-              className="library-widget"
-              disabled={added}
-              draggable={!added}
-              key={kind}
-              onClick={() => {
-                if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
-              }}
-              onDragStart={(event) => startLibraryDrag(event, kind)}
-              type="button"
-            >
-              <WidgetKindIcon kind={kind} />
-              <span>{WIDGET_LABELS[kind]}</span>
-              <GripVerticalIcon className="library-grip" size={16} />
-            </button>
-          );
-        })}
+      <div className="library-groups">
+        {WIDGET_GROUPS.map((group) => (
+          <div className="library-group" key={group.label}>
+            <p className="library-group-label">{group.label}</p>
+            <div className="library-list">
+              {group.kinds.map((kind) => {
+                const added = layout.some((item) => item.kind === kind);
+                return (
+                  <button
+                    className="library-widget"
+                    disabled={added}
+                    draggable={!added}
+                    key={kind}
+                    onClick={() => {
+                      if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
+                    }}
+                    onDragStart={(event) => startLibraryDrag(event, kind)}
+                    type="button"
+                  >
+                    <WidgetKindIcon kind={kind} />
+                    <span>{WIDGET_LABELS[kind]}</span>
+                    <GripVerticalIcon className="library-grip" size={16} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
       <p className="save-indicator" aria-live="polite">
         {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
@@ -232,6 +282,29 @@ function OverlayCanvas({
   readonly screen?: ManagedScreen;
   readonly state: OverlayState;
 }) {
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [resizingId, setResizingId] = useState<string | null>(null);
+
+  const onResizeMove = (event: ReactPointerEvent<HTMLButtonElement>, placement: WidgetPlacement) => {
+    const canvas = canvasRef.current;
+    if (resizingId !== placement.id || !canvas || !onLayoutChange) return;
+    const bounds = canvas.getBoundingClientRect();
+    const width = clamp(
+      Math.round(((event.clientX - bounds.left) / bounds.width) * OVERLAY_COLUMNS) - placement.x,
+      MIN_WIDGET_WIDTH,
+      OVERLAY_COLUMNS - placement.x,
+    );
+    const height = clamp(
+      Math.round(((event.clientY - bounds.top) / bounds.height) * OVERLAY_ROWS) - placement.y,
+      MIN_WIDGET_HEIGHT,
+      OVERLAY_ROWS - placement.y,
+    );
+    if (width === placement.width && height === placement.height) return;
+    onLayoutChange(
+      layout.map((item) => (item.id === placement.id ? { ...item, height, width } : item)),
+    );
+  };
+
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     if (!onLayoutChange) return;
     event.preventDefault();
@@ -260,11 +333,12 @@ function OverlayCanvas({
       className={publicMode ? "overlay-canvas public" : `overlay-canvas editor screen-${screen}`}
       onDragOver={onLayoutChange ? (event) => event.preventDefault() : undefined}
       onDrop={onLayoutChange ? onDrop : undefined}
+      ref={canvasRef}
     >
       {layout.map((placement) => (
         <article
           className={`canvas-widget ${publicMode ? "" : "editable"}`}
-          draggable={!publicMode}
+          draggable={!publicMode && resizingId !== placement.id}
           key={placement.id}
           onDragStart={
             publicMode ? undefined : (event) => startPlacedDrag(event, placement)
@@ -280,6 +354,25 @@ function OverlayCanvas({
             >
               <Trash2Icon size={13} />
             </button>
+          ) : null}
+          {!publicMode ? (
+            <button
+              aria-label={`Resize ${WIDGET_LABELS[placement.kind]}`}
+              className="resize-widget"
+              onPointerCancel={() => setResizingId(null)}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setResizingId(placement.id);
+              }}
+              onPointerMove={(event) => onResizeMove(event, placement)}
+              onPointerUp={(event) => {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+                setResizingId(null);
+              }}
+              type="button"
+            />
           ) : null}
           <WidgetContent
             kind={placement.kind}
@@ -304,6 +397,14 @@ function WidgetContent({
   readonly kind: WidgetKind;
   readonly state: OverlayState;
 }) {
+  if (kind === "goals") return <GoalsWidget state={state} />;
+  if (kind === "leaderboard") return <LeaderboardWidget state={state} />;
+  if (kind === "battle") return <BattleWidget state={state} />;
+  if (kind === "boss") return <BossWidget state={state} />;
+  if (kind === "jar") return <JarWidget state={state} />;
+  if (kind === "alerts") return <AlertsWidget state={state} />;
+  if (kind === "emotes") return <EmoteWallWidget state={state} />;
+  if (kind === "pulse") return <PulseWidget state={state} />;
   if (kind === "suggestion") {
     return (
       <div className="canvas-widget-inner suggestion-canvas-widget">
@@ -375,14 +476,23 @@ function WidgetContent({
   );
 }
 
-function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: ReactNode }) {
-  return <header className="widget-header"><span className="widget-title">{icon}{label}</span>{children}</header>;
-}
+const WIDGET_ICONS: Readonly<Record<WidgetKind, typeof SparklesIcon>> = {
+  alerts: BellRingIcon,
+  battle: FlameIcon,
+  boss: SkullIcon,
+  chat: MessageCircleIcon,
+  emotes: SmilePlusIcon,
+  goals: TargetIcon,
+  hype: ActivityIcon,
+  jar: CoinsIcon,
+  leaderboard: CrownIcon,
+  pulse: GaugeIcon,
+  suggestion: SparklesIcon,
+};
 
 function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
-  if (kind === "chat") return <MessageCircleIcon size={17} />;
-  if (kind === "hype") return <ActivityIcon size={17} />;
-  return <SparklesIcon size={17} />;
+  const Icon = WIDGET_ICONS[kind];
+  return <Icon size={17} />;
 }
 
 function StatusPill({ live }: { readonly live: boolean }) {

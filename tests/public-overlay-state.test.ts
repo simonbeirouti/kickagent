@@ -81,4 +81,44 @@ describe("public overlay state", () => {
     });
     expect(findOwnerConnection).toHaveBeenCalledOnce();
   });
+
+  it("keeps statement-only analysis compatible with graceful defaults", async () => {
+    findOwnerConnection.mockReset();
+    query.mockReset();
+    findOwnerConnection.mockResolvedValue({
+      active: true,
+      category_id: "1",
+      category_name: "Just Chatting",
+      channel_slug: "bsimon",
+      display_name: "bsimon",
+      id: "00000000-0000-4000-8000-000000000001",
+      is_live: true,
+      overlay_layout: [],
+      profile_picture: null,
+      stream_title: "Live now",
+      updated_at: new Date().toISOString(),
+    });
+    const analysis = {
+      basis: "chat",
+      generated_at: new Date().toISOString(),
+      hype_score: null,
+      status: "complete",
+      suggestion: "Ask chat which setup upgrade mattered most.",
+      summary: null,
+      topics: [],
+      window_start: new Date().toISOString(),
+    };
+    query
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([analysis])
+      .mockResolvedValueOnce([analysis]);
+
+    const response = await GET(new Request("http://localhost/api/overlay/state?public=overlay"));
+
+    await expect(response.json()).resolves.toMatchObject({
+      hypeScore: 0,
+      suggestion: { text: "Ask chat which setup upgrade mattered most." },
+      summary: null,
+    });
+  });
 });

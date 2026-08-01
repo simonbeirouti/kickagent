@@ -4,6 +4,28 @@ import {
   type ScreenLayouts,
 } from "@/lib/overlay-layout";
 
+export interface OverlayAlert {
+  readonly detail: string;
+  readonly emoji: string;
+  readonly headline: string;
+  readonly id: string;
+  readonly variant: "follow" | "gift" | "kicks" | "live" | "sub";
+}
+
+export interface OverlayGoal {
+  readonly current: number;
+  readonly emoji: string;
+  readonly key: "follows" | "kicks" | "subs";
+  readonly label: string;
+  readonly target: number;
+}
+
+export interface OverlaySupporter {
+  readonly giftedSubs: number;
+  readonly kicks: number;
+  readonly username: string;
+}
+
 export interface OverlayState {
   readonly activeBet: {
     readonly amount: number;
@@ -19,10 +41,24 @@ export interface OverlayState {
     readonly slug: string;
     readonly streamTitle: string | null;
   };
+  readonly alerts?: readonly OverlayAlert[];
+  readonly battle?: {
+    readonly fire: number;
+    readonly water: number;
+    readonly wins: { readonly fire: number; readonly water: number };
+  };
+  readonly boss?: {
+    readonly hp: number;
+    readonly level: number;
+    readonly maxHp: number;
+    readonly topDamage: readonly { readonly damage: number; readonly username: string }[];
+  };
   readonly connected: boolean;
+  readonly goals?: readonly OverlayGoal[];
   readonly hypeReady: boolean;
   readonly hypeScore: number;
   readonly hypeTrend: "falling" | "rising" | "steady";
+  readonly jar?: { readonly target: number; readonly units: number };
   readonly ingestionEnabled: boolean;
   readonly layout: OverlayLayout;
   readonly live: boolean;
@@ -50,6 +86,7 @@ export interface OverlayState {
     readonly stale: boolean;
     readonly text: string;
   } | null;
+  readonly supporters?: readonly OverlaySupporter[];
   readonly summary: {
     readonly generatedAt: string;
     readonly stale: boolean;
@@ -72,7 +109,24 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       status: "pending",
       text: "Talk to the girls on the left",
     },
+    alerts: [
+      { detail: "just followed the channel", emoji: "💚", headline: "pixelpilot", id: "demo-alert-1", variant: "follow" },
+      { detail: "subscribed · 3 months strong", emoji: "⭐", headline: "mika_live", id: "demo-alert-2", variant: "sub" },
+      { detail: "sent 200 KICKs — “let’s gooo”", emoji: "🪙", headline: "devon", id: "demo-alert-3", variant: "kicks" },
+      { detail: "gifted 5 subs to the community", emoji: "🎁", headline: "nova_rae", id: "demo-alert-4", variant: "gift" },
+    ],
     authenticated: true,
+    battle: { fire: 62, water: 38, wins: { fire: 2, water: 1 } },
+    boss: {
+      hp: 340,
+      level: 3,
+      maxHp: 1125,
+      topDamage: [
+        { damage: 420, username: "devon" },
+        { damage: 260, username: "pixelpilot" },
+        { damage: 105, username: "mika_live" },
+      ],
+    },
     channel: {
       category: "Just Chatting",
       displayName: "bsimon",
@@ -81,10 +135,16 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       streamTitle: "Building the future of live streaming",
     },
     connected: true,
+    goals: [
+      { current: 7, emoji: "💚", key: "follows", label: "New follows", target: 10 },
+      { current: 5, emoji: "⭐", key: "subs", label: "New subs", target: 5 },
+      { current: 320, emoji: "🪙", key: "kicks", label: "KICKs gifted", target: 500 },
+    ],
     hypeReady: true,
     hypeScore: 84,
     hypeTrend: "rising",
     ingestionEnabled: false,
+    jar: { target: 1_000, units: 640 },
     layout: DEFAULT_OVERLAY_LAYOUT,
     live: true,
     messages: [
@@ -128,6 +188,13 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       stale: false,
       text: "Ask chat what information they would want in their glasses during a live stream.",
     },
+    supporters: [
+      { giftedSubs: 5, kicks: 200, username: "nova_rae" },
+      { giftedSubs: 0, kicks: 420, username: "devon" },
+      { giftedSubs: 2, kicks: 60, username: "pixelpilot" },
+      { giftedSubs: 0, kicks: 150, username: "mika_live" },
+      { giftedSubs: 1, kicks: 0, username: "glitchcraft" },
+    ],
     summary: {
       generatedAt: secondsAgo(12),
       stale: false,

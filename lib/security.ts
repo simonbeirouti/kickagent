@@ -9,6 +9,7 @@ import {
 import { requiredEnv } from "@/lib/env";
 
 const ENCRYPTION_VERSION = "v1";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export function base64Url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url");
@@ -77,15 +78,15 @@ export function signInternalJwt(
   const connectionId =
     typeof connectionIdOrNow === "string" ? connectionIdOrNow : undefined;
   const now = connectionIdOrNow instanceof Date ? connectionIdOrNow : suppliedNow ?? new Date();
-  const secret = requiredEnv("EVE_INTERNAL_AUTH_SECRET");
+  const secret = requiredEnv("INTERNAL_API_AUTH_SECRET");
   if (secret.length < 32) {
-    throw new Error("EVE_INTERNAL_AUTH_SECRET must contain at least 32 characters.");
+    throw new Error("INTERNAL_API_AUTH_SECRET must contain at least 32 characters.");
   }
   const header = base64Url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const issuedAt = Math.floor(now.getTime() / 1000);
   const payload = base64Url(
     JSON.stringify({
-      aud: "eve-internal",
+      aud: "kickagent-internal",
       exp: issuedAt + 120,
       iat: issuedAt,
       iss: "kickagent",
@@ -97,6 +98,57 @@ export function signInternalJwt(
     .update(`${header}.${payload}`)
     .digest("base64url");
   return `${header}.${payload}.${signature}`;
+}
+
+export interface InternalJwtClaims {
+  readonly connectionId: string;
+}
+
+export function verifyInternalJwt(token: string, now = new Date()): InternalJwtClaims {
+  const [encodedHeader, encodedPayload, suppliedSignature, ...extraParts] = token.split(".");
+  if (!encodedHeader || !encodedPayload || !suppliedSignature || extraParts.length > 0) {
+    throw new Error("Invalid internal token.");
+  }
+  const secret = requiredEnv("INTERNAL_API_AUTH_SECRET");
+  if (secret.length < 32) {
+    throw new Error("INTERNAL_API_AUTH_SECRET must contain at least 32 characters.");
+  }
+  const expectedSignature = createHmac("sha256", secret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+  if (!constantTimeEqual(suppliedSignature, expectedSignature)) {
+    throw new Error("Invalid internal token.");
+  }
+
+  try {
+    const header = JSON.parse(Buffer.from(encodedHeader, "base64url").toString()) as Record<
+      string,
+      unknown
+    >;
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString()) as Record<
+      string,
+      unknown
+    >;
+    const currentTime = Math.floor(now.getTime() / 1_000);
+    if (
+      header.alg !== "HS256" ||
+      header.typ !== "JWT" ||
+      payload.aud !== "kickagent-internal" ||
+      payload.iss !== "kickagent" ||
+      payload.sub !== "kick-analysis" ||
+      typeof payload.exp !== "number" ||
+      payload.exp <= currentTime ||
+      typeof payload.iat !== "number" ||
+      payload.iat > currentTime + 30 ||
+      typeof payload.connection_id !== "string" ||
+      !UUID_PATTERN.test(payload.connection_id)
+    ) {
+      throw new Error("Invalid internal token.");
+    }
+    return { connectionId: payload.connection_id };
+  } catch {
+    throw new Error("Invalid internal token.");
+  }
 }
 
 export function constantTimeEqual(left: string, right: string): boolean {
