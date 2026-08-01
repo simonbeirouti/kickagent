@@ -26,6 +26,36 @@ export interface OverlaySupporter {
   readonly username: string;
 }
 
+export interface OverlayPredictionOption {
+  readonly id: string;
+  readonly label: string;
+  readonly percentage: number;
+  readonly points: number;
+}
+
+export interface OverlayPrediction {
+  readonly id: string;
+  readonly locksAt: string;
+  readonly opensAt: string;
+  readonly options: readonly OverlayPredictionOption[];
+  readonly participantCount: number;
+  readonly question: string;
+  readonly status: "locked" | "open" | "scheduled" | "settled";
+  readonly totalPoints: number;
+  readonly winnerOptionIds: readonly string[];
+}
+
+export interface OverlayActionBet {
+  readonly backerCount: number;
+  readonly category: string;
+  readonly id: string;
+  readonly idea: string;
+  readonly locksAt: string;
+  readonly opensAt: string;
+  readonly status: "accepted" | "backing" | "rejected" | "review";
+  readonly totalPoints: number;
+}
+
 export interface OverlayState {
   readonly authenticated: true;
   readonly channel: {
@@ -35,6 +65,7 @@ export interface OverlayState {
     readonly slug: string;
     readonly streamTitle: string | null;
   };
+  readonly actionBet: OverlayActionBet | null;
   readonly alerts?: readonly OverlayAlert[];
   readonly battle?: {
     readonly fire: number;
@@ -60,6 +91,7 @@ export interface OverlayState {
     readonly id: string;
     readonly username: string;
   }[];
+  readonly prediction: OverlayPrediction | null;
   readonly screenLayouts: ScreenLayouts;
   readonly suggestion: {
     readonly basis: "chat" | "stream_context" | null;
@@ -82,8 +114,19 @@ export interface OverlayState {
 
 export function createDemoOverlayState(now = new Date()): OverlayState {
   const secondsAgo = (seconds: number) => new Date(now.getTime() - seconds * 1_000).toISOString();
+  const secondsFromNow = (seconds: number) => new Date(now.getTime() + seconds * 1_000).toISOString();
 
   return {
+    actionBet: {
+      backerCount: 9,
+      category: "Performance",
+      id: "demo-action-bet",
+      idea: "Play the next round using a random character",
+      locksAt: secondsFromNow(42),
+      opensAt: secondsAgo(18),
+      status: "backing",
+      totalPoints: 850,
+    },
     alerts: [
       { detail: "just followed the channel", emoji: "💚", headline: "pixelpilot", id: "demo-alert-1", variant: "follow" },
       { detail: "subscribed · 3 months strong", emoji: "⭐", headline: "mika_live", id: "demo-alert-2", variant: "sub" },
@@ -140,6 +183,20 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
         username: "devon",
       },
     ],
+    prediction: {
+      id: "demo-prediction",
+      locksAt: secondsFromNow(6),
+      opensAt: secondsAgo(4),
+      options: [
+        { id: "yes", label: "Yes", percentage: 29, points: 200 },
+        { id: "no", label: "No", percentage: 71, points: 500 },
+      ],
+      participantCount: 14,
+      question: "Will Neon hit 13,000 trophies this stream?",
+      status: "open",
+      totalPoints: 700,
+      winnerOptionIds: [],
+    },
     screenLayouts: { public: DEFAULT_OVERLAY_LAYOUT },
     suggestion: {
       basis: "chat",

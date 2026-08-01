@@ -9,6 +9,8 @@ export const widgetKindSchema = z.enum([
   "suggestion",
   "chat",
   "hype",
+  "prediction",
+  "actionBet",
   "goals",
   "leaderboard",
   "battle",
@@ -64,6 +66,7 @@ export const DEFAULT_OVERLAY_LAYOUT: OverlayLayout = [
 ];
 
 export const WIDGET_DEFAULTS: Readonly<Record<WidgetKind, WidgetPlacement>> = {
+  actionBet: { height: 5, id: "action-bet", kind: "actionBet", width: 8, x: 8, y: 9 },
   alerts: { height: 5, id: "alerts", kind: "alerts", width: 7, x: 8, y: 0 },
   battle: { height: 4, id: "battle", kind: "battle", width: 10, x: 7, y: 10 },
   boss: { height: 6, id: "boss", kind: "boss", width: 7, x: 0, y: 8 },
@@ -73,6 +76,7 @@ export const WIDGET_DEFAULTS: Readonly<Record<WidgetKind, WidgetPlacement>> = {
   hype: { height: 5, id: "hype", kind: "hype", width: 8, x: 16, y: 8 },
   jar: { height: 7, id: "jar", kind: "jar", width: 5, x: 10, y: 4 },
   leaderboard: { height: 7, id: "leaderboard", kind: "leaderboard", width: 7, x: 16, y: 0 },
+  prediction: { height: 7, id: "prediction", kind: "prediction", width: 9, x: 0, y: 7 },
   pulse: { height: 6, id: "pulse", kind: "pulse", width: 8, x: 8, y: 8 },
   suggestion: { height: 10, id: "suggestion", kind: "suggestion", width: 14, x: 1, y: 2 },
 };

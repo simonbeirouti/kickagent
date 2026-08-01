@@ -88,10 +88,12 @@ function normalizeState(candidate: OverlayState, fallback: OverlayState): Overla
   return {
     ...fallback,
     ...candidate,
+    actionBet: candidate.actionBet === undefined ? fallback.actionBet : candidate.actionBet,
     channel: { ...fallback.channel, ...candidate.channel },
     hypeScore: clamp(candidate.hypeScore, 0, 100, fallback.hypeScore),
     layout,
     messages: candidate.messages.slice(0, 5),
+    prediction: candidate.prediction === undefined ? fallback.prediction : candidate.prediction,
     screenLayouts: {
       glasses: candidate.screenLayouts?.glasses
         ? parseOverlayLayout(candidate.screenLayouts.glasses)
