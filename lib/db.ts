@@ -1,20 +1,28 @@
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import postgres from "postgres";
 import { requiredEnv } from "@/lib/env";
 
-let client: NeonQueryFunction<false, false> | undefined;
+type DatabaseClient = ReturnType<typeof postgres>;
 
-function database(): NeonQueryFunction<false, false> {
-  client ??= neon(requiredEnv("DATABASE_URL"));
+let client: DatabaseClient | undefined;
+
+function database(): DatabaseClient {
+  client ??= postgres(requiredEnv("DATABASE_URL"), {
+    connect_timeout: 10,
+    idle_timeout: 20,
+    max: 5,
+  });
   return client;
 }
 
 export async function query<T extends Record<string, unknown>>(
   text: string,
-  params: readonly unknown[] = [],
+  params: readonly postgres.SerializableParameter[] = [],
 ): Promise<T[]> {
-  return (await database().query(text, [...params])) as T[];
+  const rows = await database().unsafe<T[]>(text, [...params]);
+  return [...rows];
 }
 
 export function resetDatabaseClientForTests(): void {
+  if (client) void client.end({ timeout: 0 });
   client = undefined;
 }

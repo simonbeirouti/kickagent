@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.27",
-    "@neondatabase/serverless": "^1.1.0",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@shikijs/core": "^4.1.0",
     "@shikijs/engine-javascript": "^4.1.0",
@@ -37,6 +36,7 @@
     "motion": "^12.40.0",
     "nanoid": "^5.1.11",
     "next": "^16.3.0-preview.6",
+    "postgres": "^3.4.9",
     "radix-ui": "^1.4.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

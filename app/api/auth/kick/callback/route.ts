@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
-import { appUrl, optionalEnv } from "@/lib/env";
+import { appUrl } from "@/lib/env";
+import { isKickAccountAllowed } from "@/lib/kick/access";
 import {
   deleteKickSubscriptions,
   exchangeAuthorizationCode,
@@ -12,10 +13,12 @@ import { findOwnerConnection, upsertKickConnection } from "@/lib/kick/repository
 import { constantTimeEqual, decryptJson } from "@/lib/security";
 import {
   createAppSession,
+  createStatelessAppSession,
   OAUTH_COOKIE,
   readCookie,
   secureCookieDefaults,
   SESSION_COOKIE,
+  statelessKickMode,
 } from "@/lib/session";
 import { kickSuggestionWorkflow } from "@/workflows/kick-suggestions";
 
@@ -44,8 +47,12 @@ export async function GET(request: Request): Promise<Response> {
       getKickProfile(token.access_token),
       getKickChannel(token.access_token),
     ]);
-    const allowedUserId = optionalEnv("KICK_ALLOWED_USER_ID");
-    if (allowedUserId && allowedUserId !== profile.userId) return errorRedirect("account_not_allowed");
+    if (!isKickAccountAllowed(profile.userId)) return errorRedirect("account_not_allowed");
+    if (statelessKickMode()) {
+      return authenticatedRedirect(
+        createStatelessAppSession({ accessToken: token.access_token, channel, profile }),
+      );
+    }
     const owner = await findOwnerConnection();
     if (owner && owner.kick_user_id !== profile.userId) return errorRedirect("owner_already_connected");
 
@@ -58,22 +65,26 @@ export async function GET(request: Request): Promise<Response> {
     const session = await createAppSession(connection.id);
     await start(kickSuggestionWorkflow, [connection.id, connection.workflow_generation]);
 
-    const response = NextResponse.redirect(appUrl());
-    response.cookies.set(SESSION_COOKIE, session.token, {
-      ...secureCookieDefaults,
-      expires: session.expiresAt,
-      path: "/",
-    });
-    response.cookies.set(OAUTH_COOKIE, "", {
-      ...secureCookieDefaults,
-      expires: new Date(0),
-      path: "/api/auth/kick/callback",
-    });
-    return response;
+    return authenticatedRedirect(session);
   } catch (error) {
     console.error("Kick OAuth callback failed", error);
     return errorRedirect("kick_connection_failed");
   }
+}
+
+function authenticatedRedirect(session: { readonly expiresAt: Date; readonly token: string }) {
+  const response = NextResponse.redirect(appUrl());
+  response.cookies.set(SESSION_COOKIE, session.token, {
+    ...secureCookieDefaults,
+    expires: session.expiresAt,
+    path: "/",
+  });
+  response.cookies.set(OAUTH_COOKIE, "", {
+    ...secureCookieDefaults,
+    expires: new Date(0),
+    path: "/api/auth/kick/callback",
+  });
+  return response;
 }
 
 function errorRedirect(code: string): Response {

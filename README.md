@@ -1,8 +1,18 @@
 # Kick Streamer Companion
 
-A private, streamer-only overlay built with Next.js, eve, Neon Postgres, and Vercel Workflow. It
+A multi-surface streamer companion built with Next.js, eve, PostgreSQL, and Vercel Workflow. It
 ingests signed Kick chat webhooks and creates one short talking-point cue every 30 seconds while a
 channel is live.
+
+The current unauthenticated demo surfaces are:
+
+- `/`: overlay studio and public-canvas editor
+- `/glasses`: private, glanceable agent suggestions and sensitive context
+- `/streamer`: phone-sized live brief, chat signals, and private notes
+- `/public/overlay`: the audience-facing 1920 × 1080 browser source
+
+Demo layout changes are stored in the browser's local storage, so the public overlay can be tested
+without a Kick connection or database setup.
 
 ## Kick developer setup
 
@@ -21,13 +31,16 @@ documented endpoints post and delete messages rather than read them.
 Copy `.env.example` to `.env.local` and set:
 
 - `APP_URL`: canonical deployment origin, without a trailing slash.
-- `DATABASE_URL`: Neon Postgres connection string.
+- `DATABASE_URL`: PostgreSQL connection string. Enable SSL when required by your database host.
 - `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET`: credentials from the Kick developer app.
+- `KICK_STATELESS_MODE`: profile/layout preview mode only. When enabled, it deliberately disables
+  database persistence, Kick event subscriptions, live-chat ingestion, and suggestion workflows.
 - `TOKEN_ENCRYPTION_KEY`: at least 32 random characters; encrypts Kick access and refresh tokens.
 - `EVE_INTERNAL_AUTH_SECRET`: at least 32 random characters; signs workflow-to-eve JWTs.
 - `ANTHROPIC_API_KEY`: Anthropic API key used by both eve agents for direct model calls.
-- `KICK_ALLOWED_USER_ID`: optional numeric allowlist for the single streamer.
 - `KICK_PUBLIC_KEY`: optional override of Kick's published webhook verification key.
+
+The companion is pinned to its single Kick owner by numeric user ID in `lib/kick/access.ts`.
 
 Use the same variables in Vercel Production. Preview deployments should use a separate Kick app if
 their callback origin differs.
@@ -51,5 +64,12 @@ npm test
 npm run build
 ```
 
-The home page is cookie-authenticated. OAuth tokens remain encrypted server-side, and the overlay
-never posts to Kick chat.
+The production Kick connection flow is cookie-authenticated. OAuth tokens remain encrypted server-side, and the overlay
+never posts to Kick chat or embeds the livestream video. Live status is reconciled with Kick's
+channel API at most once every 10 seconds so a delayed or missed status webhook does not leave the
+dashboard stale.
+
+After connecting, the home page becomes an overlay editor. Drag the predefined widgets around the
+24 × 14 snap grid, then add `/public/overlay` as a 1920 × 1080 OBS Browser Source. The public
+browser-source page has a transparent, fixed-size canvas and continuously receives the saved widget
+layout and live overlay state.
