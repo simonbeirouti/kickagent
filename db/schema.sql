@@ -47,6 +47,18 @@ ALTER TABLE kick_connections
   ]'::jsonb;
 
 -- statement-breakpoint
+ALTER TABLE kick_connections
+  ADD COLUMN IF NOT EXISTS screen_layouts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS suggestion_message_count integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS suggestion_next_at timestamptz NOT NULL DEFAULT (now() + interval '30 seconds'),
+  ADD COLUMN IF NOT EXISTS suggestion_window_start timestamptz NOT NULL DEFAULT now();
+
+-- statement-breakpoint
+UPDATE kick_connections
+SET screen_layouts = jsonb_build_object('public', overlay_layout)
+WHERE screen_layouts = '{}'::jsonb;
+
+-- statement-breakpoint
 CREATE TABLE IF NOT EXISTS kick_webhook_events (
   event_message_id text PRIMARY KEY,
   event_type text NOT NULL,

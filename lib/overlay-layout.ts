@@ -5,6 +5,8 @@ export const OVERLAY_ROWS = 14;
 
 export const widgetKindSchema = z.enum(["suggestion", "chat", "hype"]);
 export type WidgetKind = z.infer<typeof widgetKindSchema>;
+export const managedScreenSchema = z.enum(["glasses", "phone", "public"]);
+export type ManagedScreen = z.infer<typeof managedScreenSchema>;
 
 export const widgetPlacementSchema = z
   .object({
@@ -31,6 +33,13 @@ export const overlayLayoutSchema = z
 export type OverlayLayout = z.infer<typeof overlayLayoutSchema>;
 export type WidgetPlacement = z.infer<typeof widgetPlacementSchema>;
 
+export const screenLayoutsSchema = z.object({
+  glasses: overlayLayoutSchema.optional(),
+  phone: overlayLayoutSchema.optional(),
+  public: overlayLayoutSchema.optional(),
+});
+export type ScreenLayouts = z.infer<typeof screenLayoutsSchema>;
+
 export const DEFAULT_OVERLAY_LAYOUT: OverlayLayout = [
   { height: 10, id: "suggestion", kind: "suggestion", width: 14, x: 1, y: 2 },
   { height: 6, id: "chat", kind: "chat", width: 8, x: 16, y: 1 },
@@ -46,4 +55,11 @@ export const WIDGET_DEFAULTS: Readonly<Record<WidgetKind, WidgetPlacement>> = {
 export function parseOverlayLayout(value: unknown): OverlayLayout {
   const parsed = overlayLayoutSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_OVERLAY_LAYOUT;
+}
+
+export function parseScreenLayouts(value: unknown, publicLayout: OverlayLayout): ScreenLayouts {
+  const parsed = screenLayoutsSchema.safeParse(value);
+  return parsed.success ? { ...parsed.data, public: parsed.data.public ?? publicLayout } : {
+    public: publicLayout,
+  };
 }

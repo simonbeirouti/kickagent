@@ -6,7 +6,6 @@ import { query } from "@/lib/db";
 import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
 import { findConnectionById } from "@/lib/kick/repository";
 import { streamAnalysisSchema, type StreamAnalysis } from "@/lib/kick/types";
-import { nextWindow } from "@/lib/kick/webhook";
 import { signInternalJwt } from "@/lib/security";
 import { buildSuggestionPrompt, type PromptChatMessage } from "@/lib/suggestions";
 
@@ -16,9 +15,15 @@ import { buildSuggestionPrompt, type PromptChatMessage } from "@/lib/suggestions
 const HYPE_LOOKBACK_MS = 3 * 60_000;
 
 interface WindowPlan {
-  readonly end: string;
-  readonly start: string;
+  readonly dueAt: string;
   readonly stop: boolean;
+}
+
+type TriggerReason = "message_count" | "timer";
+
+interface TriggerClaim extends Record<string, unknown> {
+  readonly window_end: string;
+  readonly window_start: string;
 }
 
 interface ChatRow extends Record<string, unknown> {
@@ -71,27 +76,95 @@ export async function kickSuggestionWorkflow(
 
   let completedTicks = 0;
   while (true) {
-    const plan = await planNextWindow(connectionId, generation);
+    const plan = await planNextTrigger(connectionId, generation);
     if (plan.stop) return;
-    await sleep(new Date(plan.end));
-    try {
-      await analyzeWindow(connectionId, generation, plan.start, plan.end);
-    } catch (error) {
-      await markWindowFailed(connectionId, plan.start, plan.end, String(error));
+    await sleep(new Date(plan.dueAt));
+    const claim = await claimSuggestionTrigger(connectionId, generation, "timer");
+    if (claim) {
+      await runClaimedAnalysis(connectionId, generation, claim, "timer");
     }
     completedTicks += 1;
     if (completedTicks % 2_880 === 0) await cleanupExpiredData(connectionId);
   }
 }
 
-async function planNextWindow(connectionId: string, generation: number): Promise<WindowPlan> {
+export async function kickMessageSuggestionWorkflow(
+  connectionId: string,
+  generation: number,
+): Promise<void> {
+  "use workflow";
+
+  const claim = await claimSuggestionTrigger(connectionId, generation, "message_count");
+  if (claim) await runClaimedAnalysis(connectionId, generation, claim, "message_count");
+}
+
+async function runClaimedAnalysis(
+  connectionId: string,
+  generation: number,
+  claim: TriggerClaim,
+  reason: TriggerReason,
+): Promise<void> {
+  try {
+    await analyzeWindow(
+      connectionId,
+      generation,
+      claim.window_start,
+      claim.window_end,
+      reason,
+    );
+  } catch (error) {
+    await markWindowFailed(connectionId, claim.window_start, claim.window_end, String(error));
+  }
+}
+
+async function planNextTrigger(connectionId: string, generation: number): Promise<WindowPlan> {
   "use step";
   const connection = await findConnectionById(connectionId);
   if (!connection || !connection.active || connection.workflow_generation !== generation) {
-    return { end: new Date().toISOString(), start: new Date().toISOString(), stop: true };
+    return { dueAt: new Date().toISOString(), stop: true };
   }
-  const window = nextWindow(new Date());
-  return { end: window.end.toISOString(), start: window.start.toISOString(), stop: false };
+  return { dueAt: connection.suggestion_next_at, stop: false };
+}
+
+async function claimSuggestionTrigger(
+  connectionId: string,
+  generation: number,
+  reason: TriggerReason,
+): Promise<TriggerClaim | undefined> {
+  "use step";
+  const rows = await query<TriggerClaim>(
+    `WITH candidate AS (
+       SELECT suggestion_window_start AS window_start
+       FROM kick_connections
+       WHERE id = $1 AND active = true AND workflow_generation = $2
+         AND (
+           ($3 = 'timer' AND suggestion_next_at <= now()) OR
+           ($3 = 'message_count' AND suggestion_message_count >= 5)
+         )
+       FOR UPDATE
+     ), claimed AS (
+       UPDATE kick_connections AS connection SET
+         suggestion_message_count = 0,
+         suggestion_window_start = clock_timestamp(),
+         suggestion_next_at = clock_timestamp() + interval '30 seconds',
+         updated_at = now()
+       FROM candidate
+       WHERE connection.id = $1
+       RETURNING candidate.window_start, connection.suggestion_window_start AS window_end
+     )
+     SELECT window_start, window_end FROM claimed`,
+    [connectionId, generation, reason],
+  );
+  const claim = rows[0];
+  if (claim) {
+    console.info("[suggestion:trigger] claimed", {
+      connectionId,
+      reason,
+      windowEnd: claim.window_end,
+      windowStart: claim.window_start,
+    });
+  }
+  return claim;
 }
 
 async function analyzeWindow(
@@ -99,6 +172,7 @@ async function analyzeWindow(
   generation: number,
   windowStart: string,
   windowEnd: string,
+  reason: TriggerReason,
 ): Promise<void> {
   "use step";
   const connection = await findConnectionById(connectionId);
@@ -157,6 +231,14 @@ async function analyzeWindow(
     streamTitle: connection.stream_title ?? undefined,
     windowChat: cachedRows.reverse().map(toPromptMessage),
   });
+  console.info("[suggestion:analysis] requesting", {
+    connectionId,
+    messageCount: cachedRows.length,
+    messageIds: cachedRows.map((row) => row.message_id),
+    reason,
+    windowEnd,
+    windowStart,
+  });
   const suggestion = await requestSuggestion(connectionId, prompt);
   // Surfaces the engine-computed hype next to the agent's read in run logs.
   console.info(
@@ -191,9 +273,35 @@ async function requestSuggestion(
     redirect: "error",
   });
   const response = await client.session().send<StreamAnalysis>({ message: prompt, outputSchema });
-  const result = await response.result();
-  if (result.status === "failed" || !result.data) throw new Error("Suggestion agent failed.");
-  return streamAnalysisSchema.parse(result.data);
+  const startedAt = Date.now();
+  let result: unknown;
+  console.info("[eve:suggester] started", { connectionId, sessionId: response.sessionId });
+  try {
+    for await (const event of response) {
+      console.info("[eve:suggester] event", {
+        at: event.meta.at,
+        eventId: event.meta.id,
+        sessionId: response.sessionId,
+        type: event.type,
+      });
+      if (event.type === "result.completed") result = event.data.result;
+    }
+    const parsed = streamAnalysisSchema.parse(result);
+    console.info("[eve:suggester] completed", {
+      basis: parsed.basis,
+      durationMs: Date.now() - startedAt,
+      sessionId: response.sessionId,
+      suggestion: parsed.suggestion,
+    });
+    return parsed;
+  } catch (error) {
+    console.error("[eve:suggester] failed", {
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+      sessionId: response.sessionId,
+    });
+    throw error;
+  }
 }
 
 async function markWindowFailed(

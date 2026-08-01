@@ -9,7 +9,6 @@ const STORAGE_KEY = "kickagent-demo-state-v2";
 const LEGACY_STORAGE_KEY = "kickagent-demo-state-v1";
 const LEGACY_LAYOUT_KEY = "kickagent-demo-layout";
 const STATE_EVENT = "kickagent:demo-state";
-const STATE_CHANNEL = "kickagent-demo-state";
 
 interface StoredState {
   readonly state: OverlayState;
@@ -59,9 +58,6 @@ export function publishDemoOverlayState(state: OverlayState): OverlayState {
     JSON.stringify({ state: next, version: STATE_VERSION } satisfies StoredState),
   );
   window.dispatchEvent(new CustomEvent<OverlayState>(STATE_EVENT, { detail: next }));
-  const channel = new BroadcastChannel(STATE_CHANNEL);
-  channel.postMessage(next);
-  channel.close();
   return next;
 }
 
@@ -76,17 +72,11 @@ function subscribeToDemoOverlayState(onState: (state: OverlayState) => void): ()
       // Keep the last valid state if another tab writes malformed data.
     }
   };
-  const channel = new BroadcastChannel(STATE_CHANNEL);
-  const onChannel = (event: MessageEvent<OverlayState>) => onState(event.data);
-
   window.addEventListener(STATE_EVENT, onCustomEvent);
   window.addEventListener("storage", onStorage);
-  channel.addEventListener("message", onChannel);
   return () => {
     window.removeEventListener(STATE_EVENT, onCustomEvent);
     window.removeEventListener("storage", onStorage);
-    channel.removeEventListener("message", onChannel);
-    channel.close();
   };
 }
 

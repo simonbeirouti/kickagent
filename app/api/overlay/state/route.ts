@@ -6,7 +6,11 @@ import {
   findOwnerConnection,
   refreshKickChannelIfStale,
 } from "@/lib/kick/repository";
-import { DEFAULT_OVERLAY_LAYOUT, parseOverlayLayout } from "@/lib/overlay-layout";
+import {
+  DEFAULT_OVERLAY_LAYOUT,
+  parseOverlayLayout,
+  parseScreenLayouts,
+} from "@/lib/overlay-layout";
 import {
   connectionIdFromRequest,
   overlayAccessFromRequest,
@@ -88,6 +92,11 @@ export async function GET(request: Request): Promise<Response> {
           overlayAccess?.kind === "stateless" ? overlayAccess.layout : DEFAULT_OVERLAY_LAYOUT,
         messages: [],
         prediction: null,
+        screenLayouts: {
+          public: overlayAccess?.kind === "stateless"
+            ? overlayAccess.layout
+            : DEFAULT_OVERLAY_LAYOUT,
+        },
         suggestion: null,
         summary: null,
         updatedAt: new Date().toISOString(),
@@ -183,6 +192,10 @@ export async function GET(request: Request): Promise<Response> {
         username: message.sender_username,
       })),
       prediction: null,
+      screenLayouts: parseScreenLayouts(
+        connection.screen_layouts,
+        parseOverlayLayout(connection.overlay_layout),
+      ),
       suggestion: suggestion
         ? {
             basis: suggestion.basis,

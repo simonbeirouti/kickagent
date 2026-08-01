@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/security";
 import type { KickChannel, KickProfile } from "@/lib/kick/oauth";
 import type { KickToken } from "@/lib/kick/types";
-import type { OverlayLayout } from "@/lib/overlay-layout";
+import type { ManagedScreen, OverlayLayout } from "@/lib/overlay-layout";
 
 export interface ConnectionRecord extends Record<string, unknown> {
   readonly access_token_encrypted: string;
@@ -19,22 +19,29 @@ export interface ConnectionRecord extends Record<string, unknown> {
   readonly overlay_layout: unknown;
   readonly profile_picture: string | null;
   readonly refresh_token_encrypted: string;
+  readonly screen_layouts: unknown;
   readonly scopes: string[];
   readonly stream_title: string | null;
   readonly subscription_ids: string[];
   readonly token_expires_at: string;
   readonly workflow_generation: number;
+  readonly suggestion_message_count: number;
+  readonly suggestion_next_at: string;
+  readonly suggestion_window_start: string;
 }
 
 export async function updateOverlayLayout(
   connectionId: string,
+  screen: ManagedScreen,
   layout: OverlayLayout,
 ): Promise<void> {
   await query(
     `UPDATE kick_connections
-     SET overlay_layout = $2::jsonb
+     SET screen_layouts = jsonb_set(screen_layouts, ARRAY[$2], $3::jsonb, true),
+         overlay_layout = CASE WHEN $2 = 'public' THEN $3::jsonb ELSE overlay_layout END,
+         updated_at = now()
      WHERE id = $1 AND active = true`,
-    [connectionId, JSON.stringify(layout)],
+    [connectionId, screen, JSON.stringify(layout)],
   );
 }
 
@@ -97,6 +104,9 @@ export async function upsertKickConnection(input: {
       category_id = EXCLUDED.category_id,
       token_refresh_started_at = NULL,
       workflow_generation = EXCLUDED.workflow_generation,
+      suggestion_message_count = 0,
+      suggestion_next_at = now() + interval '30 seconds',
+      suggestion_window_start = now(),
       updated_at = now()
     RETURNING *`,
     [

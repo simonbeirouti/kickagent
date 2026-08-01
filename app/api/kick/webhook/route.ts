@@ -1,10 +1,14 @@
 import { query } from "@/lib/db";
+import { start } from "workflow/api";
 import { ingestChat } from "@/lib/kick/ingestion";
+import { findConnectionById } from "@/lib/kick/repository";
 import {
+  kickChatEventSchema,
   kickLivestreamMetadataEventSchema,
   kickLivestreamStatusEventSchema,
 } from "@/lib/kick/types";
 import { verifyKickWebhook } from "@/lib/kick/webhook";
+import { kickMessageSuggestionWorkflow } from "@/workflows/kick-suggestions";
 
 export const runtime = "nodejs";
 
@@ -34,10 +38,38 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    console.info("[kick:webhook] received", {
+      eventMessageId: envelope.eventMessageId,
+      eventType: envelope.eventType,
+    });
     switch (envelope.eventType) {
-      case "chat.message.sent":
-        await ingestChat(envelope.eventMessageId, envelope.eventType, body);
+      case "chat.message.sent": {
+        const outcome = await ingestChat(envelope.eventMessageId, envelope.eventType, body);
+        const event = kickChatEventSchema.parse(body);
+        console.info("[kick:chat] ingested", {
+          connectionId: outcome.connectionId,
+          content: event.content.slice(0, 500),
+          inserted: outcome.inserted,
+          messageCount: outcome.messageCount,
+          messageId: event.message_id,
+          username: event.sender.username ?? "Anonymous",
+        });
+        if (outcome.shouldGenerateSuggestion && outcome.connectionId) {
+          const connection = await findConnectionById(outcome.connectionId);
+          if (connection?.active) {
+            console.info("[suggestion:trigger] queued", {
+              connectionId: connection.id,
+              messageCount: outcome.messageCount,
+              reason: "message_count",
+            });
+            await start(kickMessageSuggestionWorkflow, [
+              connection.id,
+              connection.workflow_generation,
+            ]);
+          }
+        }
         break;
+      }
       case "livestream.status.updated":
         await ingestStatus(envelope.eventMessageId, envelope.eventType, body);
         break;

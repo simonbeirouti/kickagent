@@ -10,6 +10,7 @@
     "build": "eve build && next build --webpack",
     "db:migrate": "node scripts/migrate.mjs",
     "dev": "next dev",
+    "dev:eve": "eve dev --port 3000 --logs all",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",

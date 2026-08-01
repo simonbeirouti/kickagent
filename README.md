@@ -1,8 +1,8 @@
 # Kick Streamer Companion
 
 A multi-surface streamer companion built with Next.js, eve, PostgreSQL, and Vercel Workflow. It
-ingests signed Kick chat webhooks and creates one short talking-point cue every 30 seconds while a
-channel is live.
+ingests signed Kick chat webhooks and creates a talking-point cue after five new messages or 30
+seconds, whichever happens first.
 
 Also in this repo:
 
@@ -21,53 +21,44 @@ The live companion surfaces are:
 - `/streamer`: phone-sized agent brief and live chat signals
 - `/public/overlay`: the audience-facing 1920 × 1080 browser source
 
-All content comes from the connected Kick channel and the eve agent's rolling analysis. Only widget
-placement is editable; chat, summaries, suggestions, topics, and energy are live, read-only data.
+Chat, summaries, suggestions, topics, energy, and all screen layouts are backed by the connected
+Kick channel and PostgreSQL. The live surfaces poll fresh server state every two seconds.
 
-## Kick developer setup
+## Setup
 
-1. Enable 2FA on the Kick account and create an app under
-   [Kick Developer settings](https://kick.com/settings/developer).
-2. Set the OAuth redirect URL to `https://YOUR_DOMAIN/api/auth/kick/callback`.
-3. Enable webhooks and set the public webhook URL to
-   `https://YOUR_DOMAIN/api/kick/webhook`. Kick cannot deliver webhooks to localhost.
-4. The application requests only `user:read`, `channel:read`, and `events:subscribe`.
-
-Incoming messages use Kick's `chat.message.sent` event. The Kick Chat API is not used because its
-documented endpoints post and delete messages rather than read them.
-
-## Environment
-
-Copy `.env.example` to `.env.local` and set:
-
-- `APP_URL`: canonical deployment origin, without a trailing slash.
-- `DATABASE_URL`: PostgreSQL connection string. Enable SSL when required by your database host.
-- `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET`: credentials from the Kick developer app.
-- `KICK_STATELESS_MODE`: profile/layout preview mode only. Keep this `false` for live use; enabling
-  it deliberately disables database persistence, Kick event subscriptions, live-chat ingestion,
-  and suggestion workflows.
-- `TOKEN_ENCRYPTION_KEY`: at least 32 random characters; encrypts Kick access and refresh tokens.
-- `EVE_INTERNAL_AUTH_SECRET`: at least 32 random characters; signs workflow-to-eve JWTs.
-- `ANTHROPIC_API_KEY`: Anthropic API key used by both eve agents for direct model calls.
-- `KICK_PUBLIC_KEY`: optional override of Kick's published webhook verification key.
+1. Copy `.env.example` to `.env.local` and fill in the Kick, PostgreSQL, Eve auth, encryption, and
+   Anthropic values.
+2. Keep `KICK_STATELESS_MODE=false`; stateless mode intentionally disables ingestion and suggestions.
+3. Configure the Kick OAuth callback as `https://YOUR_DOMAIN/api/auth/kick/callback` and the signed
+   webhook as `https://YOUR_DOMAIN/api/kick/webhook`.
+4. Apply the database schema before connecting the account.
 
 Sign-in is open to any Kick account by default. Set `KICK_ALLOWED_USER_ID` (single numeric Kick
 user id or a comma-separated list; `*`/unset allows anyone) to restrict who can connect — see
 `lib/kick/access.ts`.
-
-Use the same variables in Vercel Production. Preview deployments should use a separate Kick app if
-their callback origin differs.
 
 ## Run locally
 
 ```bash
 npm install
 npm run db:migrate
-npm run dev
+npm run dev:eve
 ```
 
-For live webhook testing, expose port 3000 through a trusted HTTPS tunnel and temporarily use that
-origin for `APP_URL`, the Kick callback, and the Kick webhook URL.
+`npm run dev` still runs plain Next.js development. Use `npm run dev:eve` while troubleshooting so
+Eve session and application logs are shown together on the `APP_URL` port.
+
+## Stream diagnostics
+
+Incoming Kick comments log under `[kick:chat]`, cadence decisions under `[suggestion:trigger]`, and
+the suggester's Eve stream under `[eve:suggester]`. The logs include message and session IDs but
+never authentication tokens.
+
+```bash
+npx eve logs --events
+npx eve traces ls
+npx eve traces <trace-id>
+```
 
 ## Verification
 
@@ -77,12 +68,5 @@ npm test
 npm run build
 ```
 
-The production Kick connection flow is cookie-authenticated. OAuth tokens remain encrypted server-side, and the overlay
-never posts to Kick chat or embeds the livestream video. Live status is reconciled with Kick's
-channel API at most once every 10 seconds so a delayed or missed status webhook does not leave the
-dashboard stale.
-
-After connecting, the home page becomes an overlay editor. Drag the predefined widgets around the
-24 × 14 snap grid, then add `/public/overlay` as a 1920 × 1080 OBS Browser Source. The public
-browser-source page has a transparent, fixed-size canvas and continuously receives the saved widget
-layout and live overlay state.
+Drag the predefined widgets around the 24 × 14 snap grid, then add `/public/overlay` as a 1920 ×
+1080 browser source. Public, phone, and glasses layouts are saved independently in PostgreSQL.
