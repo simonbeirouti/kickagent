@@ -14,8 +14,14 @@ import { useLiveOverlayState } from "@/lib/live-overlay-store";
 
 type PhonePanel = "brief" | "chat" | "summary" | "widgets";
 
-export function StreamerPhoneSurface({ publicMode = false }: { readonly publicMode?: boolean }) {
-  const liveState = useLiveOverlayState({ publicMode });
+export function StreamerPhoneSurface({
+  accessToken,
+  publicMode = false,
+}: {
+  readonly accessToken?: string;
+  readonly publicMode?: boolean;
+}) {
+  const liveState = useLiveOverlayState({ accessToken, publicMode });
   // Hook order must not depend on whether live state has arrived yet.
   const [panel, setPanel] = useState<PhonePanel>("brief");
   if (!liveState.state) return <SurfaceStatus error={liveState.error} publicMode={publicMode} />;

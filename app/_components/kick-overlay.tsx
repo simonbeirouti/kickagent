@@ -28,14 +28,13 @@ import { usePersistedScreenLayouts } from "@/lib/overlay-layout-store";
 
 const MANAGED_SCREENS: readonly {
   readonly dimensions: string;
-  readonly href: string;
   readonly icon: typeof GlassesIcon;
   readonly id: ManagedScreen;
   readonly label: string;
 }[] = [
-  { dimensions: "16:9 view", href: "/glasses", icon: GlassesIcon, id: "glasses", label: "Glasses" },
-  { dimensions: "9:16 view", href: "/streamer", icon: SmartphoneIcon, id: "phone", label: "Streamer phone" },
-  { dimensions: "1920 × 1080", href: "/public/overlay", icon: MonitorUpIcon, id: "public", label: "Public overlay" },
+  { dimensions: "16:9 view", icon: GlassesIcon, id: "glasses", label: "Glasses" },
+  { dimensions: "9:16 view", icon: SmartphoneIcon, id: "phone", label: "Streamer phone" },
+  { dimensions: "1920 × 1080", icon: MonitorUpIcon, id: "public", label: "Public overlay" },
 ];
 
 const WIDGET_GROUPS: readonly {
@@ -133,6 +132,9 @@ export function KickOverlay({
   }
 
   const selectedScreenDetails = MANAGED_SCREENS.find((screen) => screen.id === selectedScreen)!;
+  const liveScreenUrl = publicOverlayUrl
+    ? screenUrlFromOverlayUrl(publicOverlayUrl, selectedScreen)
+    : undefined;
   const activeLayout = draftLayouts[selectedScreen]
     ?? persistedLayouts.layouts?.[selectedScreen]
     ?? state.screenLayouts[selectedScreen]
@@ -209,12 +211,12 @@ export function KickOverlay({
               </nav>
             </div>
             <a
-              aria-disabled={selectedScreen === "public" && !publicOverlayUrl}
-              href={selectedScreen === "public" ? publicOverlayUrl : selectedScreenDetails.href}
+              aria-disabled={!liveScreenUrl}
+              href={liveScreenUrl}
               rel="noreferrer"
               target="_blank"
             >
-              {selectedScreen === "public" && !publicOverlayUrl
+              {!liveScreenUrl
                 ? publicUrlError ? "Public URL unavailable" : "Preparing public URL…"
                 : "Open live screen"}
               <ExternalLinkIcon size={14} />
@@ -305,6 +307,13 @@ async function requestPublicOverlayUrl(layout: OverlayLayout): Promise<string> {
   const result = await response.json() as { readonly url?: unknown };
   if (typeof result.url !== "string") throw new Error("Invalid public overlay URL.");
   return result.url;
+}
+
+function screenUrlFromOverlayUrl(overlayUrl: string, screen: ManagedScreen): string {
+  const url = new URL(overlayUrl);
+  if (screen === "glasses") url.pathname = url.pathname.replace("/overlay/", "/glasses/");
+  if (screen === "phone") url.pathname = url.pathname.replace("/overlay/", "/streamer/");
+  return url.toString();
 }
 
 function ConnectScreen({ error }: { readonly error?: string }) {
