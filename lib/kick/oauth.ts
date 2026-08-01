@@ -4,6 +4,7 @@ import { appUrl, requiredEnv } from "@/lib/env";
 import { base64Url } from "@/lib/security";
 import {
   kickChannelResponseSchema,
+  kickSendChatMessageResponseSchema,
   kickSubscriptionResponseSchema,
   kickTokenSchema,
   kickUserResponseSchema,
@@ -12,7 +13,12 @@ import {
 
 const KICK_ID_BASE_URL = "https://id.kick.com";
 const KICK_API_BASE_URL = "https://api.kick.com/public/v1";
-export const KICK_SCOPES = ["user:read", "channel:read", "events:subscribe"] as const;
+export const KICK_SCOPES = [
+  "user:read",
+  "channel:read",
+  "events:subscribe",
+  "chat:write",
+] as const;
 export const KICK_EVENTS = [
   "chat.message.sent",
   "livestream.status.updated",
@@ -133,6 +139,37 @@ export async function getKickChannel(accessToken: string): Promise<KickChannel> 
     slug: channel.slug,
     streamTitle: channel.stream_title ?? undefined,
   };
+}
+
+/**
+ * Post a message into a channel's live chat. `broadcasterUserId` picks the
+ * "user" send type (posts as the connected streamer's own account, into
+ * their channel); omit it to send as the app's "bot" type instead. Content
+ * is capped at 500 chars by the Kick API.
+ */
+export async function sendKickChatMessage(
+  accessToken: string,
+  input: {
+    readonly content: string;
+    readonly broadcasterUserId?: string;
+    readonly replyToMessageId?: string;
+  },
+): Promise<{ readonly isSent: boolean; readonly messageId: string }> {
+  const payload = kickSendChatMessageResponseSchema.parse(
+    await kickApi("/chat", accessToken, {
+      body: JSON.stringify({
+        content: input.content,
+        type: input.broadcasterUserId ? "user" : "bot",
+        ...(input.broadcasterUserId
+          ? { broadcaster_user_id: Number(input.broadcasterUserId) }
+          : {}),
+        ...(input.replyToMessageId ? { reply_to_message_id: input.replyToMessageId } : {}),
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+  return { isSent: payload.data.is_sent, messageId: payload.data.message_id };
 }
 
 export async function subscribeToKickEvents(accessToken: string): Promise<string[]> {

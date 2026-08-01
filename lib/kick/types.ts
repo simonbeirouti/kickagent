@@ -99,6 +99,14 @@ export const kickLivestreamMetadataEventSchema = z.object({
   }),
 });
 
+export const kickSendChatMessageResponseSchema = z.object({
+  data: z.object({
+    is_sent: z.boolean(),
+    message_id: z.string(),
+  }),
+  message: z.string().optional(),
+});
+
 export const suggestionSchema = z.object({
   basis: z.enum(["chat", "stream_context"]),
   insight: z.string().trim().min(1).max(140),
