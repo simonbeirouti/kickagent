@@ -18,7 +18,9 @@ describe("security helpers", () => {
     const encrypted = encryptSecret("kick-token");
     expect(encrypted).not.toContain("kick-token");
     expect(decryptSecret(encrypted)).toBe("kick-token");
-    expect(() => decryptSecret(`${encrypted.slice(0, -1)}x`)).toThrow();
+    const parts = encrypted.split(".");
+    parts[3] = `${parts[3][0] === "A" ? "B" : "A"}${parts[3].slice(1)}`;
+    expect(() => decryptSecret(parts.join("."))).toThrow();
   });
 
   it("round-trips JSON OAuth state", () => {

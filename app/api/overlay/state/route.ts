@@ -1,6 +1,13 @@
 import { query } from "@/lib/db";
-import { findConnectionById } from "@/lib/kick/repository";
-import { connectionIdFromRequest } from "@/lib/session";
+import { getKickChannel } from "@/lib/kick/oauth";
+import { findConnectionById, refreshKickChannelIfStale } from "@/lib/kick/repository";
+import { DEFAULT_OVERLAY_LAYOUT, parseOverlayLayout } from "@/lib/overlay-layout";
+import {
+  connectionIdFromRequest,
+  overlayAccessFromRequest,
+  statelessKickMode,
+  statelessSessionFromRequest,
+} from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,13 +28,71 @@ interface AnalysisRow extends Record<string, unknown> {
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const connectionId = await connectionIdFromRequest(request);
+  const requestUrl = new URL(request.url);
+  const syncKick = requestUrl.searchParams.get("sync") === "kick";
+  const overlayAccess = overlayAccessFromRequest(request);
+  if (statelessKickMode()) {
+    const session =
+      overlayAccess?.kind === "stateless"
+        ? overlayAccess.session
+        : statelessSessionFromRequest(request);
+    if (!session) {
+      return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
+    }
+    let channel = session.channel;
+    if (syncKick) {
+      try {
+        channel = await getKickChannel(session.accessToken);
+      } catch (error) {
+        console.error("Failed to refresh stateless Kick channel state", error);
+      }
+    }
+    return Response.json(
+      {
+        authenticated: true,
+        channel: {
+          category: channel.categoryName ?? null,
+          displayName: session.profile.name,
+          profilePicture: session.profile.profilePicture ?? null,
+          slug: channel.slug,
+          streamTitle: channel.streamTitle ?? null,
+        },
+        connected: true,
+        hypeScore: 72,
+        ingestionEnabled: false,
+        live: channel.isLive,
+        layout:
+          overlayAccess?.kind === "stateless" ? overlayAccess.layout : DEFAULT_OVERLAY_LAYOUT,
+        messages: [],
+        suggestion: null,
+        updatedAt: new Date().toISOString(),
+      },
+      { headers: noStoreHeaders() },
+    );
+  }
+  const connectionId =
+    overlayAccess?.kind === "connection"
+      ? overlayAccess.connectionId
+      : await connectionIdFromRequest(request);
   if (!connectionId) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
   }
-  const connection = await findConnectionById(connectionId);
+  let connection = await findConnectionById(connectionId);
   if (!connection || !connection.active) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
+  }
+  if (
+    overlayAccess?.kind === "connection" &&
+    overlayAccess.workflowGeneration !== connection.workflow_generation
+  ) {
+    return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
+  }
+  if (syncKick) {
+    try {
+      connection = await refreshKickChannelIfStale(connection);
+    } catch (error) {
+      console.error("Failed to refresh Kick channel state", error);
+    }
   }
   const [messageRows, completedRows, latestRows] = await Promise.all([
     query<MessageRow>(
@@ -69,7 +134,9 @@ export async function GET(request: Request): Promise<Response> {
       },
       connected: connection.active,
       hypeScore: 72,
+      ingestionEnabled: true,
       live: connection.is_live,
+      layout: parseOverlayLayout(connection.overlay_layout),
       messages: messageRows.reverse().map((message) => ({
         content: message.content,
         createdAt: message.created_at,
@@ -91,5 +158,9 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 function noStoreHeaders(): HeadersInit {
-  return { "cache-control": "private, no-store, max-age=0" };
+  return {
+    "cache-control": "private, no-store, max-age=0",
+    "referrer-policy": "no-referrer",
+    "x-robots-tag": "noindex, nofollow",
+  };
 }

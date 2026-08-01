@@ -11,6 +11,7 @@ import {
   connectionIdFromRequest,
   secureCookieDefaults,
   SESSION_COOKIE,
+  statelessKickMode,
 } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!requestOrigin || requestOrigin !== new URL(appUrl()).origin) {
     return Response.json({ error: "Invalid origin." }, { status: 403 });
   }
+  if (statelessKickMode()) return clearedSessionResponse();
   const connectionId = await connectionIdFromRequest(request);
   if (!connectionId) return Response.json({ error: "Unauthorized." }, { status: 401 });
   const connection = await findConnectionById(connectionId);
@@ -42,6 +44,10 @@ export async function POST(request: Request): Promise<Response> {
     }
     await disconnectConnection(connectionId);
   }
+  return clearedSessionResponse();
+}
+
+function clearedSessionResponse(): NextResponse {
   const response = NextResponse.json({ ok: true });
   response.cookies.set(SESSION_COOKIE, "", {
     ...secureCookieDefaults,

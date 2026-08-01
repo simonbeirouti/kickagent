@@ -2,14 +2,27 @@
 
 import {
   ActivityIcon,
+  CheckIcon,
   Clock3Icon,
+  CopyIcon,
+  GripVerticalIcon,
   LogOutIcon,
   MessageCircleIcon,
   RadioIcon,
   SparklesIcon,
+  Trash2Icon,
   ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { CSSProperties, DragEvent, ReactNode } from "react";
+import {
+  OVERLAY_COLUMNS,
+  OVERLAY_ROWS,
+  WIDGET_DEFAULTS,
+  type OverlayLayout,
+  type WidgetKind,
+  type WidgetPlacement,
+} from "@/lib/overlay-layout";
 
 interface OverlayState {
   readonly authenticated: true;
@@ -22,6 +35,8 @@ interface OverlayState {
   };
   readonly connected: boolean;
   readonly hypeScore: number;
+  readonly ingestionEnabled: boolean;
+  readonly layout: OverlayLayout;
   readonly live: boolean;
   readonly messages: readonly {
     readonly content: string;
@@ -38,36 +53,110 @@ interface OverlayState {
   readonly updatedAt: string;
 }
 
-export function KickOverlay() {
+interface DragPayload {
+  readonly id?: string;
+  readonly kind: WidgetKind;
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
+const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
+  chat: "Latest chat",
+  hype: "Hype score",
+  suggestion: "Next talking point",
+};
+
+export function KickOverlay({
+  accessToken,
+  publicMode = false,
+}: {
+  readonly accessToken?: string;
+  readonly publicMode?: boolean;
+}) {
   const [state, setState] = useState<OverlayState>();
+  const [draftLayout, setDraftLayout] = useState<OverlayLayout>();
   const [authenticated, setAuthenticated] = useState<boolean>();
   const [error, setError] = useState<string>();
   const [disconnecting, setDisconnecting] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
-  const refresh = useCallback(async () => {
-    try {
-      const response = await fetch("/api/overlay/state", { cache: "no-store" });
-      if (response.status === 401) {
-        setAuthenticated(false);
-        setState(undefined);
-        return;
+  const refresh = useCallback(
+    async (syncKick = false) => {
+      try {
+        const search = new URLSearchParams();
+        if (accessToken) search.set("token", accessToken);
+        if (syncKick) search.set("sync", "kick");
+        const response = await fetch(`/api/overlay/state?${search}`, { cache: "no-store" });
+        if (response.status === 401) {
+          setAuthenticated(false);
+          setState(undefined);
+          return;
+        }
+        if (!response.ok) throw new Error("Overlay update failed.");
+        const next = (await response.json()) as OverlayState;
+        setState(next);
+        if (!publicMode) setDraftLayout((current) => current ?? next.layout);
+        setAuthenticated(true);
+        setError(undefined);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Overlay update failed.");
       }
-      if (!response.ok) throw new Error("Overlay update failed.");
-      setState((await response.json()) as OverlayState);
-      setAuthenticated(true);
-      setError(undefined);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Overlay update failed.");
-    }
-  }, []);
+    },
+    [accessToken, publicMode],
+  );
 
   useEffect(() => {
     const queryError = new URLSearchParams(window.location.search).get("error");
-    if (queryError) setError(formatConnectionError(queryError));
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 2_000);
+    if (queryError && !publicMode) setError(formatConnectionError(queryError));
+    void refresh(true);
+    let refreshCount = 0;
+    const timer = window.setInterval(() => {
+      refreshCount += 1;
+      void refresh(refreshCount % 5 === 0);
+    }, 2_000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [publicMode, refresh]);
+
+  const saveLayout = async (layout: OverlayLayout) => {
+    setDraftLayout(layout);
+    setSaveState("saving");
+    try {
+      const response = await fetch("/api/overlay/layout", {
+        body: JSON.stringify(layout),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      });
+      if (!response.ok) throw new Error("Could not save the overlay layout.");
+      setSaveState("saved");
+      window.setTimeout(() => setSaveState("idle"), 1_500);
+    } catch (cause) {
+      setSaveState("idle");
+      setError(cause instanceof Error ? cause.message : "Could not save the overlay layout.");
+    }
+  };
+
+  const copyObsUrl = async () => {
+    setCopying(true);
+    try {
+      const response = await fetch("/api/overlay/access", {
+        body: JSON.stringify({ layout: draftLayout }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Could not create the OBS URL.");
+      const result = (await response.json()) as { readonly url: string };
+      await navigator.clipboard.writeText(result.url);
+      setCopied(true);
+      setError(undefined);
+      window.setTimeout(() => setCopied(false), 2_000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create the OBS URL.");
+    } finally {
+      setCopying(false);
+    }
+  };
 
   const disconnect = async () => {
     setDisconnecting(true);
@@ -84,11 +173,22 @@ export function KickOverlay() {
   };
 
   if (authenticated === undefined) return <LoadingScreen />;
-  if (!authenticated || !state) return <ConnectScreen error={error} />;
+  if (!authenticated || !state) {
+    return publicMode ? <InvalidOverlayScreen /> : <ConnectScreen error={error} />;
+  }
 
+  if (publicMode) {
+    return (
+      <main className="public-overlay-shell">
+        <OverlayCanvas layout={state.layout} publicMode state={state} />
+      </main>
+    );
+  }
+
+  const layout = draftLayout ?? state.layout;
   return (
-    <main className="overlay-shell">
-      <header className="overlay-header">
+    <main className="dashboard-shell">
+      <header className="dashboard-header">
         <div className="channel-identity">
           {state.channel.profilePicture ? (
             <img alt="" className="channel-avatar" src={state.channel.profilePicture} />
@@ -96,12 +196,21 @@ export function KickOverlay() {
             <span className="channel-avatar channel-avatar-fallback">K</span>
           )}
           <div>
-            <p className="eyebrow">Streamer companion</p>
+            <p className="eyebrow">Overlay studio</p>
             <h1>{state.channel.displayName}</h1>
           </div>
         </div>
         <div className="header-actions">
           <StatusPill live={state.live} />
+          <button
+            className="obs-link-button"
+            disabled={copying}
+            onClick={() => void copyObsUrl()}
+            type="button"
+          >
+            {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
+            {copied ? "Copied" : copying ? "Creating…" : "Copy OBS URL"}
+          </button>
           <button
             aria-label="Disconnect Kick"
             className="icon-button"
@@ -115,103 +224,250 @@ export function KickOverlay() {
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {!state.ingestionEnabled ? (
+        <div className="error-banner">
+          Live chat and suggestions are disabled while Kick stateless mode is enabled. Reconnect
+          with database-backed mode enabled to subscribe to Kick chat events.
+        </div>
+      ) : null}
 
-      <section className="widget-grid">
-        <article className="widget suggestion-widget">
-          <WidgetHeader icon={<SparklesIcon size={17} />} label="Next talking point">
-            <Freshness generatedAt={state.suggestion?.generatedAt} stale={state.suggestion?.stale} />
-          </WidgetHeader>
-          <div className="suggestion-content">
-            <p>{suggestionText(state)}</p>
+      <div className="editor-layout">
+        <aside className="widget-library">
+          <div>
+            <p className="eyebrow">Widgets</p>
+            <h2>Build your screen</h2>
+            <p className="library-copy">Drag a widget onto the canvas, then place it where you want.</p>
           </div>
-          <footer className="widget-footer">
-            <span>{state.channel.streamTitle || "No stream title"}</span>
-            <span>{state.channel.category || "No category"}</span>
-          </footer>
-        </article>
-
-        <article className="widget chat-widget">
-          <WidgetHeader icon={<MessageCircleIcon size={17} />} label="Latest chat">
-            <span className="count-badge">{state.messages.length}/5</span>
-          </WidgetHeader>
-          <div className="message-list">
-            {state.messages.length === 0 ? (
-              <div className="empty-messages">
-                <RadioIcon size={20} />
-                <span>Listening for chat…</span>
-              </div>
-            ) : (
-              state.messages.map((message) => (
-                <div className="chat-message" key={message.id}>
-                  <span className="chat-user">{message.username}</span>
-                  <span className="chat-copy">{message.content}</span>
-                  <time>{relativeTime(message.createdAt)}</time>
-                </div>
-              ))
-            )}
+          <div className="library-list">
+            {(["suggestion", "chat", "hype"] as const).map((kind) => {
+              const added = layout.some((item) => item.kind === kind);
+              return (
+                <button
+                  className="library-widget"
+                  disabled={added}
+                  draggable={!added}
+                  key={kind}
+                  onClick={() => {
+                    if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
+                  }}
+                  onDragStart={(event) => startLibraryDrag(event, kind)}
+                  type="button"
+                >
+                  <WidgetKindIcon kind={kind} />
+                  <span>{WIDGET_LABELS[kind]}</span>
+                  <GripVerticalIcon className="library-grip" size={16} />
+                </button>
+              );
+            })}
           </div>
-        </article>
+          <p className="save-indicator" aria-live="polite">
+            {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
+          </p>
+        </aside>
 
-        <article className="widget hype-widget">
-          <WidgetHeader icon={<ActivityIcon size={17} />} label="Hype score">
-            <span className="preview-badge">Preview</span>
-          </WidgetHeader>
-          <div className="hype-content">
-            <div
-              aria-label={`Hype score ${state.hypeScore} out of 100`}
-              className="hype-ring"
-              style={{ "--hype": `${state.hypeScore * 3.6}deg` } as React.CSSProperties}
-            >
-              <strong>{state.hypeScore}</strong>
-              <span>/ 100</span>
+        <section className="canvas-panel">
+          <div className="canvas-heading">
+            <div>
+              <p className="eyebrow">Browser source preview</p>
+              <h2>1920 × 1080</h2>
             </div>
-            <div className="hype-copy">
-              <ZapIcon size={18} />
-              <span>Good energy</span>
-            </div>
+            <span>Drag to reposition</span>
           </div>
-        </article>
-      </section>
+          <OverlayCanvas
+            layout={layout}
+            onLayoutChange={(next) => void saveLayout(next)}
+            state={state}
+          />
+        </section>
+      </div>
     </main>
   );
 }
 
-function WidgetHeader({
-  children,
-  icon,
-  label,
+function OverlayCanvas({
+  layout,
+  onLayoutChange,
+  publicMode = false,
+  state,
 }: {
-  readonly children: React.ReactNode;
-  readonly icon: React.ReactNode;
-  readonly label: string;
+  readonly layout: OverlayLayout;
+  readonly onLayoutChange?: (layout: OverlayLayout) => void;
+  readonly publicMode?: boolean;
+  readonly state: OverlayState;
 }) {
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!onLayoutChange) return;
+    event.preventDefault();
+    const payload = readDragPayload(event);
+    if (!payload) return;
+    const template = payload.id
+      ? layout.find((item) => item.id === payload.id)
+      : WIDGET_DEFAULTS[payload.kind];
+    if (!template) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const column = Math.round(((event.clientX - bounds.left) / bounds.width) * OVERLAY_COLUMNS);
+    const row = Math.round(((event.clientY - bounds.top) / bounds.height) * OVERLAY_ROWS);
+    const moved = {
+      ...template,
+      x: clamp(column - payload.offsetX, 0, OVERLAY_COLUMNS - template.width),
+      y: clamp(row - payload.offsetY, 0, OVERLAY_ROWS - template.height),
+    };
+    const next = payload.id
+      ? layout.map((item) => (item.id === payload.id ? moved : item))
+      : [...layout.filter((item) => item.kind !== payload.kind), moved];
+    onLayoutChange(next);
+  };
+
   return (
-    <header className="widget-header">
-      <span className="widget-title">
-        {icon}
-        {label}
-      </span>
-      {children}
-    </header>
+    <div
+      className={publicMode ? "overlay-canvas public" : "overlay-canvas editor"}
+      onDragOver={onLayoutChange ? (event) => event.preventDefault() : undefined}
+      onDrop={onLayoutChange ? onDrop : undefined}
+    >
+      {layout.map((placement) => (
+        <article
+          className={`canvas-widget ${publicMode ? "" : "editable"}`}
+          draggable={!publicMode}
+          key={placement.id}
+          onDragStart={
+            publicMode ? undefined : (event) => startPlacedDrag(event, placement)
+          }
+          style={placementStyle(placement)}
+        >
+          {!publicMode ? (
+            <button
+              aria-label={`Remove ${WIDGET_LABELS[placement.kind]}`}
+              className="remove-widget"
+              onClick={() => onLayoutChange?.(layout.filter((item) => item.id !== placement.id))}
+              type="button"
+            >
+              <Trash2Icon size={13} />
+            </button>
+          ) : null}
+          <WidgetContent kind={placement.kind} state={state} />
+        </article>
+      ))}
+      {!publicMode && layout.length === 0 ? (
+        <div className="empty-canvas">
+          <SparklesIcon size={22} />
+          <span>Drag a widget here</span>
+        </div>
+      ) : null}
+    </div>
   );
+}
+
+function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly state: OverlayState }) {
+  if (kind === "suggestion") {
+    return (
+      <div className="canvas-widget-inner suggestion-canvas-widget">
+        <WidgetHeader icon={<SparklesIcon size={17} />} label="Next talking point">
+          <Freshness generatedAt={state.suggestion?.generatedAt} stale={state.suggestion?.stale} />
+        </WidgetHeader>
+        <div className="suggestion-content"><p>{suggestionText(state)}</p></div>
+        <footer className="widget-footer">
+          <span>{state.channel.streamTitle || "No stream title"}</span>
+          <span>{state.channel.category || "No category"}</span>
+        </footer>
+      </div>
+    );
+  }
+  if (kind === "chat") {
+    return (
+      <div className="canvas-widget-inner chat-canvas-widget">
+        <WidgetHeader icon={<MessageCircleIcon size={17} />} label="Latest chat">
+          <span className="count-badge">{state.messages.length}/5</span>
+        </WidgetHeader>
+        <div className="message-list">
+          {state.messages.length === 0 ? (
+            <div className="empty-messages"><RadioIcon size={20} /><span>Listening for chat…</span></div>
+          ) : state.messages.map((message) => (
+            <div className="chat-message" key={message.id}>
+              <span className="chat-user">{message.username}</span>
+              <span className="chat-copy">{message.content}</span>
+              <time>{relativeTime(message.createdAt)}</time>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="canvas-widget-inner hype-canvas-widget">
+      <WidgetHeader icon={<ActivityIcon size={17} />} label="Hype score">
+        <span className="preview-badge">Preview</span>
+      </WidgetHeader>
+      <div className="hype-content">
+        <div
+          aria-label={`Hype score ${state.hypeScore} out of 100`}
+          className="hype-ring"
+          style={{ "--hype": `${state.hypeScore * 3.6}deg` } as CSSProperties}
+        >
+          <strong>{state.hypeScore}</strong><span>/ 100</span>
+        </div>
+        <div className="hype-copy"><ZapIcon size={18} /><span>Good energy</span></div>
+      </div>
+    </div>
+  );
+}
+
+function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: string }) {
+  return <header className="widget-header"><span className="widget-title">{icon}{label}</span>{children}</header>;
+}
+
+function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
+  if (kind === "chat") return <MessageCircleIcon size={17} />;
+  if (kind === "hype") return <ActivityIcon size={17} />;
+  return <SparklesIcon size={17} />;
 }
 
 function StatusPill({ live }: { readonly live: boolean }) {
-  return (
-    <span className={live ? "status-pill live" : "status-pill offline"}>
-      <span className="status-dot" />
-      {live ? "Live" : "Offline"}
-    </span>
-  );
+  return <span className={live ? "status-pill live" : "status-pill offline"}><span className="status-dot" />{live ? "Live" : "Offline"}</span>;
 }
 
-function Freshness({ generatedAt, stale }: { generatedAt?: string; stale?: boolean }) {
-  return (
-    <span className={stale ? "freshness stale" : "freshness"}>
-      <Clock3Icon size={13} />
-      {generatedAt ? (stale ? "Delayed" : relativeTime(generatedAt)) : "Waiting"}
-    </span>
-  );
+function Freshness({ generatedAt, stale }: { readonly generatedAt?: string; readonly stale?: boolean }) {
+  return <span className={stale ? "freshness stale" : "freshness"}><Clock3Icon size={13} />{generatedAt ? (stale ? "Delayed" : relativeTime(generatedAt)) : "Waiting"}</span>;
+}
+
+function startLibraryDrag(event: DragEvent<HTMLButtonElement>, kind: WidgetKind) {
+  const template = WIDGET_DEFAULTS[kind];
+  writeDragPayload(event, { kind, offsetX: Math.floor(template.width / 2), offsetY: Math.floor(template.height / 2) });
+}
+
+function startPlacedDrag(event: DragEvent<HTMLElement>, placement: WidgetPlacement) {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  writeDragPayload(event, {
+    id: placement.id,
+    kind: placement.kind,
+    offsetX: Math.round((event.nativeEvent.offsetX / bounds.width) * placement.width),
+    offsetY: Math.round((event.nativeEvent.offsetY / bounds.height) * placement.height),
+  });
+}
+
+function writeDragPayload(event: DragEvent<HTMLElement>, payload: DragPayload) {
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("application/x-kick-widget", JSON.stringify(payload));
+}
+
+function readDragPayload(event: DragEvent<HTMLElement>): DragPayload | undefined {
+  try {
+    return JSON.parse(event.dataTransfer.getData("application/x-kick-widget")) as DragPayload;
+  } catch {
+    return undefined;
+  }
+}
+
+function placementStyle(placement: WidgetPlacement): CSSProperties {
+  return {
+    height: `${(placement.height / OVERLAY_ROWS) * 100}%`,
+    left: `${(placement.x / OVERLAY_COLUMNS) * 100}%`,
+    top: `${(placement.y / OVERLAY_ROWS) * 100}%`,
+    width: `${(placement.width / OVERLAY_COLUMNS) * 100}%`,
+  };
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
 function suggestionText(state: OverlayState): string {
@@ -222,32 +478,16 @@ function suggestionText(state: OverlayState): string {
 
 function ConnectScreen({ error }: { readonly error?: string }) {
   return (
-    <main className="connect-screen">
-      <div className="connect-card">
-        <div className="kick-mark">K</div>
-        <p className="eyebrow">Kick streamer companion</p>
-        <h1>Stay present. We’ll watch the room.</h1>
-        <p className="connect-copy">
-          Get a fresh talking point every 30 seconds, keep the latest chat close, and never lose the
-          energy of your stream.
-        </p>
-        {error ? <div className="connect-error">{error}</div> : null}
-        <a className="connect-button" href="/api/auth/kick/start">
-          Connect Kick
-          <span aria-hidden>→</span>
-        </a>
-        <p className="privacy-note">Private to you. This companion never posts in your chat.</p>
-      </div>
-    </main>
+    <main className="connect-screen"><div className="connect-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Stay present. We’ll watch the room.</h1><p className="connect-copy">Get a fresh talking point every 30 seconds, keep the latest chat close, and never lose the energy of your stream.</p>{error ? <div className="connect-error">{error}</div> : null}<a className="connect-button" href="/api/auth/kick/start">Connect Kick<span aria-hidden>→</span></a><p className="privacy-note">Private to you. This companion never posts in your chat.</p></div></main>
   );
 }
 
+function InvalidOverlayScreen() {
+  return <main className="connect-screen"><div className="connect-card invalid-overlay-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Overlay link unavailable.</h1><p className="connect-copy">Copy a fresh OBS URL from the connected companion dashboard.</p></div></main>;
+}
+
 function LoadingScreen() {
-  return (
-    <main className="connect-screen">
-      <div className="loading-pulse" />
-    </main>
-  );
+  return <main className="connect-screen"><div className="loading-pulse" /></main>;
 }
 
 function relativeTime(value: string): string {
