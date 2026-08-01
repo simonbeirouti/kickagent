@@ -6,9 +6,13 @@ import {
   CrownIcon,
   FlameIcon,
   GaugeIcon,
+  MoveRightIcon,
   SkullIcon,
   SmilePlusIcon,
   TargetIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
+  ZapIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -286,6 +290,83 @@ export function PulseWidget({ label = "Chat pulse", state }: OverlayWidgetProps)
           ) : words.map((word) => <span className="pulse-word" key={word}>{word}</span>)}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Colour bands ported from overlay/hype-meter.html: the fill blends steel
+// blue → amber → kick green → white-hot as the score climbs, so the
+// engagement band is readable from colour alone.
+const HYPE_BAR_BANDS: readonly {
+  readonly at: number;
+  readonly rgb: readonly [number, number, number];
+}[] = [
+  { at: 0, rgb: [90, 110, 117] },
+  { at: 35, rgb: [255, 176, 32] },
+  { at: 70, rgb: [83, 252, 24] },
+  { at: 100, rgb: [182, 255, 143] },
+];
+
+export function hypeBarColor(score: number): string {
+  const value = Math.max(0, Math.min(100, score));
+  const upperIndex = Math.max(1, HYPE_BAR_BANDS.findIndex((band) => value <= band.at));
+  const hi = HYPE_BAR_BANDS[upperIndex];
+  const lo = HYPE_BAR_BANDS[upperIndex - 1];
+  const fraction = (value - lo.at) / (hi.at - lo.at);
+  const channel = (index: 0 | 1 | 2) => Math.round(lo.rgb[index] + (hi.rgb[index] - lo.rgb[index]) * fraction);
+  return `rgb(${channel(0)} ${channel(1)} ${channel(2)})`;
+}
+
+const HYPE_BAR_TICKS = Array.from({ length: 11 }, (_, index) => index * 10);
+
+const TREND_ICONS = {
+  falling: TrendingDownIcon,
+  rising: TrendingUpIcon,
+  steady: MoveRightIcon,
+} as const;
+
+/**
+ * Slim strip version of the hype meter, meant to sit along the top edge of a
+ * screen. Same live engine fields as the hype widget (hypeScore/hypeReady/
+ * hypeTrend) — never a static score in the live path; the fill and colour
+ * band move with the room.
+ */
+export function HypeBarWidget({ label = "Hype bar", state }: OverlayWidgetProps) {
+  const score = Math.max(0, Math.min(100, Math.round(state.hypeScore)));
+  const status = !state.ingestionEnabled ? "Preview" : state.hypeReady ? "Live" : "Calibrating";
+  const calibrating = status === "Calibrating";
+  // Session peak: the notch parks at the highest score this view has seen.
+  const [peak, setPeak] = useState(0);
+  useEffect(() => {
+    if (!calibrating) setPeak((current) => Math.max(current, score));
+  }, [calibrating, score]);
+  const TrendIcon = TREND_ICONS[state.hypeTrend];
+  return (
+    <div
+      className={`canvas-widget-inner hypebar-canvas-widget${calibrating ? " calibrating" : ""}`}
+      style={{
+        "--bar-color": hypeBarColor(score),
+        "--bar-glow": score >= 1 ? 0.25 + 0.45 * (score / 100) : 0,
+        "--bar-on": score >= 1 ? 1 : 0,
+        "--bar-width": `${score}%`,
+      } as CSSProperties}
+    >
+      <span className="hypebar-title"><ZapIcon size={15} />{label}</span>
+      <div aria-label={`Hype score ${score} out of 100`} className="hypebar-track">
+        <span aria-hidden className="hypebar-ticks">
+          {HYPE_BAR_TICKS.map((tick) => (
+            <i className={tick % 50 === 0 ? "major" : undefined} key={tick} style={{ left: `${tick}%` }} />
+          ))}
+        </span>
+        <i className="hypebar-glow" />
+        <i className="hypebar-fill" />
+        {peak > 0 ? <i className="hypebar-peak" style={{ left: `${peak}%` }} /> : null}
+      </div>
+      <span className="hypebar-readout">
+        <strong>{score}</strong>
+        <TrendIcon aria-label={`Hype ${state.hypeTrend}`} className={`hypebar-trend ${state.hypeTrend}`} size={15} />
+      </span>
+      <span className="preview-badge">{status}</span>
     </div>
   );
 }

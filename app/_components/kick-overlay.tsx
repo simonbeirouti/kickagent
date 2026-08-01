@@ -40,7 +40,7 @@ const WIDGET_GROUPS: readonly {
   readonly kinds: readonly WidgetKind[];
   readonly label: string;
 }[] = [
-  { kinds: ["suggestion", "chat", "hype"], label: "Agent" },
+  { kinds: ["suggestion", "chat", "hype", "hypeBar"], label: "Agent" },
   { kinds: ["goals", "leaderboard", "jar", "alerts"], label: "Community" },
   { kinds: ["battle", "boss", "emotes", "pulse"], label: "Hype & fun" },
 ];

@@ -2430,6 +2430,180 @@ body:has(.glasses-hud) {
   font-size: clamp(0.4rem, 2.6cqw, 0.82rem);
 }
 
+/* Slim hype bar strip — the horizontal hype meter designed to sit along the
+   top edge of a screen. Visual language ported from overlay/hype-meter.html:
+   band-blended fill, blurred glow layer, tick marks every 10 (bigger at
+   0/50/100) and a session-peak notch. Sized with container-query units so the
+   pill stays slim at any widget size; the live score arrives as CSS vars
+   (--bar-width/--bar-color/--bar-on/--bar-glow) set by the widget. */
+.hypebar-canvas-widget {
+  flex-direction: row;
+  align-items: center;
+  padding: 0 3cqw;
+  gap: 2.4cqw;
+}
+
+.hypebar-title {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 24cqw;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 0.35rem;
+  color: #a8afa9;
+  font-size: clamp(0.42rem, 24cqh, 0.8rem);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hypebar-title svg {
+  flex: 0 0 auto;
+  width: clamp(0.55rem, 26cqh, 0.95rem);
+  height: clamp(0.55rem, 26cqh, 0.95rem);
+  color: #53fc18;
+}
+
+.hypebar-title .editable-widget-text {
+  width: 100%;
+}
+
+.hypebar-track {
+  position: relative;
+  min-width: 0;
+  height: clamp(0.7rem, 44cqh, 2.6rem);
+  flex: 1;
+  border-radius: 999px;
+  background: rgb(28 38 32 / 95%);
+}
+
+.hypebar-glow,
+.hypebar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--bar-width, 0%);
+  min-width: clamp(0.7rem, 44cqh, 2.6rem); /* keeps the pill cap round at tiny values */
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bar-color, #5a6e75);
+  /* Smooth interpolated movement between live score polls — never snaps. */
+  transition:
+    width 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 900ms ease,
+    opacity 400ms ease;
+}
+
+.hypebar-fill {
+  opacity: var(--bar-on, 0);
+}
+
+.hypebar-fill::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(255 255 255 / 22%), transparent 55%);
+  content: ""; /* sheen so the fill reads as lit, not flat */
+}
+
+.hypebar-glow {
+  opacity: var(--bar-glow, 0);
+  filter: blur(clamp(4px, 16cqh, 13px));
+}
+
+.hypebar-peak {
+  position: absolute;
+  z-index: 1;
+  top: -14%;
+  bottom: -14%;
+  width: clamp(2px, 0.4cqw, 3px);
+  border-radius: 2px;
+  background: #b6ff8f;
+  box-shadow: 0 0 8px rgb(182 255 143 / 80%);
+  transform: translateX(-50%);
+  transition: left 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Ticks live on an inset rail so 0 and 100 land inside the pill's round caps. */
+.hypebar-ticks {
+  position: absolute;
+  inset: 0 clamp(0.35rem, 22cqh, 1.3rem);
+}
+
+.hypebar-ticks i {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 34%;
+  border-radius: 1px;
+  background: rgb(255 255 255 / 9%);
+  transform: translate(-50%, -50%);
+}
+
+.hypebar-ticks i.major {
+  width: 3px;
+  height: 60%;
+  background: rgb(255 255 255 / 16%);
+}
+
+.hypebar-readout {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.28rem;
+  color: var(--bar-color, #a8afa9);
+  font-variant-numeric: tabular-nums;
+  transition: color 900ms ease;
+}
+
+.hypebar-readout strong {
+  font-size: clamp(0.6rem, 38cqh, 1.5rem);
+  line-height: 1;
+}
+
+.hypebar-readout svg {
+  width: clamp(0.55rem, 28cqh, 1rem);
+  height: clamp(0.55rem, 28cqh, 1rem);
+}
+
+.hypebar-trend.rising {
+  color: #53fc18;
+}
+
+.hypebar-trend.falling {
+  color: #ff6d6d;
+}
+
+.hypebar-trend.steady {
+  color: #8fa192;
+}
+
+.hypebar-canvas-widget .preview-badge {
+  flex: 0 0 auto;
+}
+
+/* Calibrating: the meter is still learning the room's baseline, so the fill
+   breathes dimmed and the glow stays off — same signal as the hype widget's
+   Calibrating badge, translated to the bar. */
+.hypebar-canvas-widget.calibrating .hypebar-glow {
+  opacity: 0;
+}
+
+.hypebar-canvas-widget.calibrating .hypebar-fill {
+  animation: hypebar-calibrating 2.4s ease-in-out infinite;
+}
+
+@keyframes hypebar-calibrating {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .remove-widget {
   position: absolute;
   z-index: 2;
