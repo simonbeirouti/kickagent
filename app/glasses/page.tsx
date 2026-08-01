@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { GlassesSurface } from "@/app/_components/companion-surfaces";
-import { createDemoOverlayState } from "@/lib/overlay-state";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -8,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function GlassesPage() {
-  return <GlassesSurface state={createDemoOverlayState()} />;
+  return <GlassesSurface />;
 }

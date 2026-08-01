@@ -7,7 +7,6 @@ import {
   refreshKickChannelIfStale,
 } from "@/lib/kick/repository";
 import { DEFAULT_OVERLAY_LAYOUT, parseOverlayLayout } from "@/lib/overlay-layout";
-import { createDemoOverlayState } from "@/lib/overlay-state";
 import {
   connectionIdFromRequest,
   overlayAccessFromRequest,
@@ -32,19 +31,18 @@ interface MessageRow extends Record<string, unknown> {
 interface AnalysisRow extends Record<string, unknown> {
   readonly basis: "chat" | "stream_context" | null;
   readonly generated_at: string | null;
+  readonly hype_score: number | null;
   readonly status: "processing" | "complete" | "failed";
   readonly suggestion: string | null;
+  readonly summary: string | null;
+  readonly topics: unknown;
   readonly window_start: string;
 }
 
 export async function GET(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
-  const demo = requestUrl.searchParams.get("demo") === "1";
   const publicOverlay = requestUrl.searchParams.get("public") === "overlay";
   const syncKick = requestUrl.searchParams.get("sync") === "kick";
-  if (demo) {
-    return Response.json(createDemoOverlayState(), { headers: noStoreHeaders() });
-  }
   const overlayAccess = overlayAccessFromRequest(request);
   // The public overlay is backed by the persisted owner connection and must not
   // depend on the viewer's session cookie, even when stateless dashboard mode is
@@ -89,6 +87,7 @@ export async function GET(request: Request): Promise<Response> {
           overlayAccess?.kind === "stateless" ? overlayAccess.layout : DEFAULT_OVERLAY_LAYOUT,
         messages: [],
         suggestion: null,
+        summary: null,
         updatedAt: new Date().toISOString(),
       },
       { headers: noStoreHeaders() },
@@ -129,14 +128,14 @@ export async function GET(request: Request): Promise<Response> {
       [connectionId],
     ),
     query<AnalysisRow>(
-      `SELECT window_start, status, suggestion, basis, generated_at
+      `SELECT window_start, status, suggestion, basis, summary, topics, hype_score, generated_at
        FROM analysis_windows
        WHERE connection_id = $1 AND status = 'complete'
        ORDER BY window_start DESC LIMIT 1`,
       [connectionId],
     ),
     query<AnalysisRow>(
-      `SELECT window_start, status, suggestion, basis, generated_at
+      `SELECT window_start, status, suggestion, basis, summary, topics, hype_score, generated_at
        FROM analysis_windows
        WHERE connection_id = $1
        ORDER BY window_start DESC LIMIT 1`,
@@ -188,10 +187,31 @@ export async function GET(request: Request): Promise<Response> {
             text: suggestion.suggestion,
           }
         : null,
+      summary: suggestion?.summary
+        ? {
+            generatedAt: suggestion.generated_at,
+            stale,
+            text: suggestion.summary,
+            topics: parseTopics(suggestion.topics),
+          }
+        : null,
       updatedAt: new Date().toISOString(),
     },
     { headers: noStoreHeaders() },
   );
+}
+
+function parseTopics(value: unknown): { label: string; percentage: number }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((topic) => {
+    if (!topic || typeof topic !== "object") return [];
+    const candidate = topic as Record<string, unknown>;
+    if (typeof candidate.label !== "string" || typeof candidate.percentage !== "number") return [];
+    return [{
+      label: candidate.label.slice(0, 48),
+      percentage: Math.max(0, Math.min(100, Math.round(candidate.percentage))),
+    }];
+  }).slice(0, 3);
 }
 
 function noStoreHeaders(): HeadersInit {

@@ -5,7 +5,7 @@ import { appUrl } from "@/lib/env";
 import { query } from "@/lib/db";
 import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
 import { findConnectionById } from "@/lib/kick/repository";
-import { suggestionSchema, type Suggestion } from "@/lib/kick/types";
+import { streamAnalysisSchema, type StreamAnalysis } from "@/lib/kick/types";
 import { nextWindow } from "@/lib/kick/webhook";
 import { signInternalJwt } from "@/lib/security";
 import { buildSuggestionPrompt, type PromptChatMessage } from "@/lib/suggestions";
@@ -42,10 +42,24 @@ const outputSchema = {
   additionalProperties: false,
   properties: {
     basis: { enum: ["chat", "stream_context"], type: "string" },
-    insight: { maxLength: 140, minLength: 1, type: "string" },
+    hypeScore: { maximum: 100, minimum: 0, type: "integer" },
+    summary: { maxLength: 280, minLength: 1, type: "string" },
     suggestion: { maxLength: 140, minLength: 1, type: "string" },
+    topics: {
+      items: {
+        additionalProperties: false,
+        properties: {
+          label: { maxLength: 48, minLength: 1, type: "string" },
+          percentage: { maximum: 100, minimum: 0, type: "integer" },
+        },
+        required: ["label", "percentage"],
+        type: "object",
+      },
+      maxItems: 3,
+      type: "array",
+    },
   },
-  required: ["suggestion", "basis", "insight"],
+  required: ["suggestion", "summary", "topics", "hypeScore", "basis"],
   type: "object",
 } as const;
 
@@ -144,31 +158,42 @@ async function analyzeWindow(
     windowChat: cachedRows.reverse().map(toPromptMessage),
   });
   const suggestion = await requestSuggestion(connectionId, prompt);
-  // `insight` isn't persisted yet — analysis_windows has no column for it. It's
-  // logged so the hype-aware read is visible in workflow run logs until the
-  // overlay is wired to show it.
+  // Surfaces the engine-computed hype next to the agent's read in run logs.
   console.info(
-    `[kick-suggestions] connection=${connectionId} window=${windowStart} hype=${hype.score} insight=${JSON.stringify(suggestion.insight)}`,
+    `[kick-suggestions] connection=${connectionId} window=${windowStart} hype=${hype.score} summary=${JSON.stringify(suggestion.summary)}`,
   );
   await query(
     `UPDATE analysis_windows SET
-      status = 'complete', suggestion = $4, basis = $5, error = NULL,
+      status = 'complete', suggestion = $4, basis = $5, summary = $6,
+      topics = $7::jsonb, hype_score = $8, error = NULL,
       generated_at = now(), updated_at = now()
      WHERE connection_id = $1 AND window_start = $2 AND window_end = $3`,
-    [connectionId, windowStart, windowEnd, suggestion.suggestion, suggestion.basis],
+    [
+      connectionId,
+      windowStart,
+      windowEnd,
+      suggestion.suggestion,
+      suggestion.basis,
+      suggestion.summary,
+      JSON.stringify(suggestion.topics),
+      suggestion.hypeScore,
+    ],
   );
 }
 
-async function requestSuggestion(connectionId: string, prompt: string): Promise<Suggestion> {
+async function requestSuggestion(
+  connectionId: string,
+  prompt: string,
+): Promise<StreamAnalysis> {
   const client = new Client({
     auth: { bearer: signInternalJwt(connectionId) },
     host: `${appUrl()}/eve/agents/suggester`,
     redirect: "error",
   });
-  const response = await client.session().send<Suggestion>({ message: prompt, outputSchema });
+  const response = await client.session().send<StreamAnalysis>({ message: prompt, outputSchema });
   const result = await response.result();
   if (result.status === "failed" || !result.data) throw new Error("Suggestion agent failed.");
-  return suggestionSchema.parse(result.data);
+  return streamAnalysisSchema.parse(result.data);
 }
 
 async function markWindowFailed(

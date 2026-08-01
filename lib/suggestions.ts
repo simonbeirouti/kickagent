@@ -22,7 +22,7 @@ export function buildSuggestionPrompt(input: {
       ? "(none)"
       : messages.map((message) => JSON.stringify(message)).join("\n");
   return [
-    "Create the streamer's next talking-point cue.",
+    "Create a live brief and the streamer's next talking-point cue.",
     `Stream title: ${input.streamTitle || "Untitled stream"}`,
     `Category: ${input.categoryName || "Unspecified"}`,
     formatHypeLine(input.hype),
@@ -32,6 +32,7 @@ export function buildSuggestionPrompt(input: {
     formatMessages(input.recentChat),
     "Recent suggestions that must not be repeated:",
     input.recentSuggestions.length === 0 ? "(none)" : input.recentSuggestions.join("\n"),
+    "Summarize what matters now, identify up to three audience topics with their approximate share of recent chat attention, and score the room's current energy from 0 to 100.",
     "Return one fresh cue. Prefer the completed window when it contains a clear audience interest.",
   ]
     .filter((line): line is string => line !== null)

@@ -3,22 +3,20 @@
 import {
   ActivityIcon,
   Clock3Icon,
+  ExternalLinkIcon,
+  GlassesIcon,
   GripVerticalIcon,
   LogOutIcon,
   MessageCircleIcon,
+  MonitorUpIcon,
   RadioIcon,
+  SmartphoneIcon,
   SparklesIcon,
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
-import { DashboardContentManager } from "@/app/_components/dashboard-content-manager";
-import {
-  publishDemoOverlayState,
-  readDemoOverlayState,
-  subscribeToDemoOverlayState,
-} from "@/lib/demo-overlay-store";
 import {
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
@@ -36,19 +34,31 @@ interface DragPayload {
   readonly offsetY: number;
 }
 
+type ManagedScreen = "glasses" | "phone" | "public";
+
+const MANAGED_SCREENS: readonly {
+  readonly dimensions: string;
+  readonly href: string;
+  readonly icon: typeof GlassesIcon;
+  readonly id: ManagedScreen;
+  readonly label: string;
+}[] = [
+  { dimensions: "16:9 view", href: "/glasses", icon: GlassesIcon, id: "glasses", label: "Glasses" },
+  { dimensions: "9:16 view", href: "/streamer", icon: SmartphoneIcon, id: "phone", label: "Streamer phone" },
+  { dimensions: "1920 × 1080", href: "/public/overlay", icon: MonitorUpIcon, id: "public", label: "Public overlay" },
+];
+
 const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
   chat: "Latest chat",
-  hype: "Hype score",
-  suggestion: "Next talking point",
+  hype: "Agent energy",
+  suggestion: "Live brief",
 };
 
 export function KickOverlay({
   accessToken,
-  demoMode = false,
   publicMode = false,
 }: {
   readonly accessToken?: string;
-  readonly demoMode?: boolean;
   readonly publicMode?: boolean;
 }) {
   const [state, setState] = useState<OverlayState>();
@@ -57,6 +67,8 @@ export function KickOverlay({
   const [error, setError] = useState<string>();
   const [disconnecting, setDisconnecting] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [selectedScreen, setSelectedScreen] = useState<ManagedScreen>("public");
+  const [surfaceLayouts, setSurfaceLayouts] = useState<Partial<Record<ManagedScreen, OverlayLayout>>>({});
 
   const refresh = useCallback(
     async (syncKick = false) => {
@@ -64,8 +76,7 @@ export function KickOverlay({
         const search = new URLSearchParams();
         if (accessToken) search.set("token", accessToken);
         else if (publicMode) search.set("public", "overlay");
-        if (demoMode) search.set("demo", "1");
-        if (syncKick && !demoMode) search.set("sync", "kick");
+        if (syncKick) search.set("sync", "kick");
         const response = await fetch(`/api/overlay/state?${search}`, { cache: "no-store" });
         if (response.status === 401) {
           setAuthenticated(false);
@@ -73,8 +84,7 @@ export function KickOverlay({
           return;
         }
         if (!response.ok) throw new Error("Overlay update failed.");
-        const received = (await response.json()) as OverlayState;
-        const next = demoMode ? readDemoOverlayState(received) : received;
+        const next = (await response.json()) as OverlayState;
         setState(next);
         if (!publicMode) setDraftLayout((current) => current ?? next.layout);
         setAuthenticated(true);
@@ -83,7 +93,7 @@ export function KickOverlay({
         setError(cause instanceof Error ? cause.message : "Overlay update failed.");
       }
     },
-    [accessToken, demoMode, publicMode],
+    [accessToken, publicMode],
   );
 
   useEffect(() => {
@@ -98,24 +108,9 @@ export function KickOverlay({
     return () => window.clearInterval(timer);
   }, [publicMode, refresh]);
 
-  useEffect(() => {
-    if (!demoMode) return;
-    return subscribeToDemoOverlayState((next) => {
-      setState(next);
-      setDraftLayout(next.layout);
-      setAuthenticated(true);
-    });
-  }, [demoMode]);
-
   const saveLayout = async (layout: OverlayLayout) => {
     setDraftLayout(layout);
     setSaveState("saving");
-    if (demoMode) {
-      if (state) setState(publishDemoOverlayState({ ...state, layout }));
-      setSaveState("saved");
-      window.setTimeout(() => setSaveState("idle"), 1_500);
-      return;
-    }
     try {
       const response = await fetch("/api/overlay/layout", {
         body: JSON.stringify(layout),
@@ -163,6 +158,15 @@ export function KickOverlay({
   }
 
   const layout = draftLayout ?? state.layout;
+  const selectedScreenDetails = MANAGED_SCREENS.find((screen) => screen.id === selectedScreen)!;
+  const activeLayout = selectedScreen === "public" ? layout : surfaceLayouts[selectedScreen] ?? [];
+  const saveActiveLayout = async (next: OverlayLayout) => {
+    if (selectedScreen === "public") {
+      await saveLayout(next);
+      return;
+    }
+    setSurfaceLayouts((current) => ({ ...current, [selectedScreen]: next }));
+  };
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
@@ -179,57 +183,45 @@ export function KickOverlay({
         </div>
         <div className="header-actions">
           <StatusPill live={state.live} />
-          {demoMode ? <span className="demo-pill">No auth · Demo data</span> : null}
-          {!demoMode ? (
-            <button
-              aria-label="Disconnect Kick"
-              className="icon-button"
-              disabled={disconnecting}
-              onClick={() => void disconnect()}
-              type="button"
-            >
-              <LogOutIcon size={17} />
-            </button>
-          ) : null}
+          <button
+            aria-label="Disconnect Kick"
+            className="icon-button"
+            disabled={disconnecting}
+            onClick={() => void disconnect()}
+            type="button"
+          >
+            <LogOutIcon size={17} />
+          </button>
         </div>
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      {demoMode ? (
-        <DashboardContentManager
-          onChange={(next) => setState(publishDemoOverlayState(next))}
-          publicEditor={(
-            <div className="editor-layout manager-public-editor">
-              <WidgetLibrary layout={layout} saveLayout={saveLayout} saveState={saveState} />
-              <section className="canvas-panel">
-                <div className="canvas-heading">
-                  <div>
-                    <p className="eyebrow">Edit widgets directly</p>
-                    <h2>1920 × 1080</h2>
-                  </div>
-                  <span>Drag to reposition</span>
-                </div>
-                <OverlayCanvas
-                  layout={layout}
-                  onLayoutChange={(next) => void saveLayout(next)}
-                  onStateChange={(next) => setState(publishDemoOverlayState(next))}
-                  state={state}
-                />
-              </section>
+      <div className="editor-layout dashboard-builder">
+        <WidgetLibrary layout={activeLayout} saveLayout={saveActiveLayout} saveState={selectedScreen === "public" ? saveState : "idle"} />
+        <section className="canvas-panel">
+          <div className="screen-picker-row">
+            <div>
+              <p className="eyebrow">Screens</p>
+              <nav aria-label="Choose a screen" className="screen-picker">
+                {MANAGED_SCREENS.map(({ icon: Icon, id, label }) => (
+                  <button aria-pressed={selectedScreen === id} key={id} onClick={() => setSelectedScreen(id)} type="button">
+                    <Icon size={15} />{label}
+                  </button>
+                ))}
+              </nav>
             </div>
-          )}
-          state={state}
-        />
-      ) : (
-        <div className="editor-layout">
-          <WidgetLibrary layout={layout} saveLayout={saveLayout} saveState={saveState} />
-          <section className="canvas-panel">
-            <div className="canvas-heading"><h2>1920 × 1080</h2><span>Drag to reposition</span></div>
-            <OverlayCanvas layout={layout} onLayoutChange={(next) => void saveLayout(next)} state={state} />
-          </section>
-        </div>
-      )}
+            <a href={selectedScreenDetails.href} rel="noreferrer" target="_blank">Open live screen <ExternalLinkIcon size={14} /></a>
+          </div>
+          <div className="canvas-heading">
+            <div><p className="eyebrow">Selected screen</p><h2>{selectedScreenDetails.label} · {selectedScreenDetails.dimensions}</h2></div>
+            <span>Drag widgets onto the screen</span>
+          </div>
+          <div className={`screen-canvas-stage ${selectedScreen}`}>
+            <OverlayCanvas layout={activeLayout} onLayoutChange={(next) => void saveActiveLayout(next)} screen={selectedScreen} state={state} />
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
@@ -248,7 +240,7 @@ function WidgetLibrary({
       <div>
         <p className="eyebrow">Widgets</p>
         <h2>Build your screen</h2>
-        <p className="library-copy">Add a widget, then edit it directly on the canvas.</p>
+        <p className="library-copy">Choose the live widgets to show, then position them on the canvas.</p>
       </div>
       <div className="library-list">
         {(["suggestion", "chat", "hype"] as const).map((kind) => {
@@ -282,14 +274,14 @@ function WidgetLibrary({
 function OverlayCanvas({
   layout,
   onLayoutChange,
-  onStateChange,
   publicMode = false,
+  screen = "public",
   state,
 }: {
   readonly layout: OverlayLayout;
   readonly onLayoutChange?: (layout: OverlayLayout) => void;
-  readonly onStateChange?: (state: OverlayState) => void;
   readonly publicMode?: boolean;
+  readonly screen?: ManagedScreen;
   readonly state: OverlayState;
 }) {
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -317,7 +309,7 @@ function OverlayCanvas({
 
   return (
     <div
-      className={publicMode ? "overlay-canvas public" : "overlay-canvas editor"}
+      className={publicMode ? "overlay-canvas public" : `overlay-canvas editor screen-${screen}`}
       onDragOver={onLayoutChange ? (event) => event.preventDefault() : undefined}
       onDrop={onLayoutChange ? onDrop : undefined}
     >
@@ -342,9 +334,7 @@ function OverlayCanvas({
             </button>
           ) : null}
           <WidgetContent
-            editable={Boolean(onStateChange)}
             kind={placement.kind}
-            onStateChange={onStateChange}
             state={state}
           />
         </article>
@@ -360,78 +350,31 @@ function OverlayCanvas({
 }
 
 function WidgetContent({
-  editable,
   kind,
-  onStateChange,
   state,
 }: {
-  readonly editable: boolean;
   readonly kind: WidgetKind;
-  readonly onStateChange?: (state: OverlayState) => void;
   readonly state: OverlayState;
 }) {
-  const labels = state.surfaceContent?.widgetLabels;
-  const updateLabel = (
-    key: keyof NonNullable<OverlayState["surfaceContent"]>["widgetLabels"],
-    value: string,
-  ) => {
-    if (!state.surfaceContent) return;
-    onStateChange?.({
-      ...state,
-      surfaceContent: {
-        ...state.surfaceContent,
-        widgetLabels: { ...state.surfaceContent.widgetLabels, [key]: value },
-      },
-    });
-  };
-
   if (kind === "suggestion") {
     return (
       <div className="canvas-widget-inner suggestion-canvas-widget">
         <WidgetHeader
           icon={<SparklesIcon size={17} />}
-          label={editable ? (
-            <EditableWidgetText
-              ariaLabel="Public suggestion widget title"
-              onChange={(value) => updateLabel("publicSuggestion", value)}
-              value={labels?.publicSuggestion ?? ""}
-            />
-          ) : labels?.publicSuggestion ?? "Next talking point"}
+          label="Agent live brief"
         >
-          <Freshness generatedAt={state.suggestion?.generatedAt} stale={state.suggestion?.stale} />
+          <Freshness generatedAt={state.summary?.generatedAt} stale={state.summary?.stale} />
         </WidgetHeader>
         <div className="suggestion-content">
-          {editable ? (
-            <textarea
-              aria-label="Public talking point"
-              className="public-widget-prompt-input"
-              onChange={(event) => onStateChange?.({
-                ...state,
-                suggestion: state.suggestion
-                  ? { ...state.suggestion, text: event.target.value }
-                  : null,
-              })}
-              value={suggestionText(state)}
-            />
-          ) : <p>{suggestionText(state)}</p>}
+          <p>{state.summary?.text ?? "Waiting for the first agent brief…"}</p>
+        </div>
+        <div className="live-cue">
+          <span><SparklesIcon size={13} /> Next talking point</span>
+          <p>{suggestionText(state)}</p>
         </div>
         <footer className="widget-footer">
-          {editable ? (
-            <>
-              <EditableWidgetText
-                ariaLabel="Public stream title"
-                onChange={(value) => onStateChange?.({ ...state, channel: { ...state.channel, streamTitle: value } })}
-                value={state.channel.streamTitle ?? ""}
-              />
-              <EditableWidgetText
-                ariaLabel="Public category"
-                onChange={(value) => onStateChange?.({ ...state, channel: { ...state.channel, category: value } })}
-                value={state.channel.category ?? ""}
-              />
-            </>
-          ) : (
-            <><span>{state.channel.streamTitle || "No stream title"}</span><span>{state.channel.category || "No category"}</span></>
-          )}
+          <span>{state.channel.streamTitle || "No stream title"}</span>
+          <span>{state.channel.category || "No category"}</span>
         </footer>
       </div>
     );
@@ -441,45 +384,17 @@ function WidgetContent({
       <div className="canvas-widget-inner chat-canvas-widget">
         <WidgetHeader
           icon={<MessageCircleIcon size={17} />}
-          label={editable ? (
-            <EditableWidgetText
-              ariaLabel="Public chat widget title"
-              onChange={(value) => updateLabel("publicChat", value)}
-              value={labels?.publicChat ?? ""}
-            />
-          ) : labels?.publicChat ?? "Latest chat"}
+          label="Live chat"
         >
           <span className="count-badge">{state.messages.length}/5</span>
         </WidgetHeader>
         <div className="message-list">
           {state.messages.length === 0 ? (
             <div className="empty-messages"><RadioIcon size={20} /></div>
-          ) : state.messages.map((message, index) => (
+          ) : state.messages.map((message) => (
             <div className="chat-message" key={message.id}>
-              {editable ? (
-                <>
-                  <EditableWidgetText
-                    ariaLabel={`Public chat username ${index + 1}`}
-                    className="chat-user"
-                    onChange={(value) => onStateChange?.({
-                      ...state,
-                      messages: state.messages.map((item, itemIndex) => itemIndex === index ? { ...item, username: value } : item),
-                    })}
-                    value={message.username}
-                  />
-                  <EditableWidgetText
-                    ariaLabel={`Public chat message ${index + 1}`}
-                    className="chat-copy"
-                    onChange={(value) => onStateChange?.({
-                      ...state,
-                      messages: state.messages.map((item, itemIndex) => itemIndex === index ? { ...item, content: value } : item),
-                    })}
-                    value={message.content}
-                  />
-                </>
-              ) : (
-                <><span className="chat-user">{message.username}</span><span className="chat-copy">{message.content}</span></>
-              )}
+              <span className="chat-user">{message.username}</span>
+              <span className="chat-copy">{message.content}</span>
               <time>{relativeTime(message.createdAt)}</time>
             </div>
           ))}
@@ -491,13 +406,7 @@ function WidgetContent({
     <div className="canvas-widget-inner hype-canvas-widget">
       <WidgetHeader
         icon={<ActivityIcon size={17} />}
-        label={editable ? (
-          <EditableWidgetText
-            ariaLabel="Public hype widget title"
-            onChange={(value) => updateLabel("publicHype", value)}
-            value={labels?.publicHype ?? ""}
-          />
-        ) : labels?.publicHype ?? "Hype score"}
+        label="Agent energy"
       >
         <span className="preview-badge">
           {!state.ingestionEnabled ? "Preview" : state.hypeReady ? "Live" : "Calibrating"}
@@ -509,17 +418,7 @@ function WidgetContent({
           className="hype-ring"
           style={{ "--hype": `${state.hypeScore * 3.6}deg` } as CSSProperties}
         >
-          {editable ? (
-            <input
-              aria-label="Public hype score"
-              className="hype-score-input"
-              max="100"
-              min="0"
-              onChange={(event) => onStateChange?.({ ...state, hypeScore: Number(event.target.value) })}
-              type="number"
-              value={state.hypeScore}
-            />
-          ) : <strong>{state.hypeScore}</strong>}
+          <strong>{state.hypeScore}</strong>
           <span>/ 100</span>
         </div>
         <div className="hype-copy"><ZapIcon size={18} /><span>{hypeLabel(state)}</span></div>
@@ -530,28 +429,6 @@ function WidgetContent({
 
 function WidgetHeader({ children, icon, label }: { readonly children: ReactNode; readonly icon: ReactNode; readonly label: ReactNode }) {
   return <header className="widget-header"><span className="widget-title">{icon}{label}</span>{children}</header>;
-}
-
-function EditableWidgetText({
-  ariaLabel,
-  className,
-  onChange,
-  value,
-}: {
-  readonly ariaLabel: string;
-  readonly className?: string;
-  readonly onChange: (value: string) => void;
-  readonly value: string;
-}) {
-  return (
-    <input
-      aria-label={ariaLabel}
-      className={`editable-widget-text ${className ?? ""}`}
-      onChange={(event) => onChange(event.target.value)}
-      onDragStart={(event) => event.stopPropagation()}
-      value={value}
-    />
-  );
 }
 
 function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
@@ -619,7 +496,7 @@ function hypeLabel(state: OverlayState): string {
 
 function suggestionText(state: OverlayState): string {
   if (state.suggestion?.text) return state.suggestion.text;
-  return "";
+  return "Listening for a useful moment…";
 }
 
 function ConnectScreen({ error }: { readonly error?: string }) {

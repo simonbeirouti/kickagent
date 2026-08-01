@@ -1,4 +1,4 @@
-import { DEFAULT_OVERLAY_LAYOUT, type OverlayLayout } from "@/lib/overlay-layout";
+import type { OverlayLayout } from "@/lib/overlay-layout";
 
 export interface OverlayState {
   readonly authenticated: true;
@@ -22,111 +22,20 @@ export interface OverlayState {
     readonly id: string;
     readonly username: string;
   }[];
-  readonly privateContext?: {
-    readonly headline: string;
-    readonly notes: readonly string[];
-  };
   readonly suggestion: {
     readonly basis: "chat" | "stream_context" | null;
     readonly generatedAt: string;
     readonly stale: boolean;
     readonly text: string;
   } | null;
-  readonly surfaceContent?: {
-    readonly glassesCues: readonly string[];
-    readonly phoneTopics: readonly {
+  readonly summary: {
+    readonly generatedAt: string;
+    readonly stale: boolean;
+    readonly text: string;
+    readonly topics: readonly {
       readonly label: string;
       readonly percentage: number;
     }[];
-    readonly viewerCount: string;
-    readonly widgetLabels: {
-      readonly glassesPrivate: string;
-      readonly glassesSuggestion: string;
-      readonly phonePulse: string;
-      readonly phoneSuggestion: string;
-      readonly phoneTopics: string;
-      readonly publicChat: string;
-      readonly publicHype: string;
-      readonly publicSuggestion: string;
-    };
-  };
+  } | null;
   readonly updatedAt: string;
-}
-
-export function createDemoOverlayState(now = new Date()): OverlayState {
-  const secondsAgo = (seconds: number) => new Date(now.getTime() - seconds * 1_000).toISOString();
-
-  return {
-    authenticated: true,
-    channel: {
-      category: "Just Chatting",
-      displayName: "bsimon",
-      profilePicture: null,
-      slug: "bsimon",
-      streamTitle: "Building the future of live streaming",
-    },
-    connected: true,
-    hypeReady: true,
-    hypeScore: 84,
-    hypeTrend: "rising",
-    ingestionEnabled: true,
-    layout: DEFAULT_OVERLAY_LAYOUT,
-    live: true,
-    messages: [
-      {
-        content: "Ask about the first stream you ever watched",
-        createdAt: secondsAgo(42),
-        id: "demo-message-1",
-        username: "pixelpilot",
-      },
-      {
-        content: "The glasses idea is actually wild",
-        createdAt: secondsAgo(28),
-        id: "demo-message-2",
-        username: "mika_live",
-      },
-      {
-        content: "Can we see the phone view next?",
-        createdAt: secondsAgo(11),
-        id: "demo-message-3",
-        username: "devon",
-      },
-    ],
-    privateContext: {
-      headline: "Keep the product name private until the reveal",
-      notes: [
-        "Demo the glasses before the phone view",
-        "Thank Mika for the raid when there is a natural pause",
-      ],
-    },
-    suggestion: {
-      basis: "chat",
-      generatedAt: secondsAgo(7),
-      stale: false,
-      text: "Ask chat what information they would want in their glasses during a live stream.",
-    },
-    surfaceContent: {
-      glassesCues: [
-        "Ask chat what information they would want in their glasses during a live stream.",
-        "Mika's message is getting traction — ask whether the glasses should feel invisible or expressive.",
-        "Pause after the reveal and let chat react before moving to the phone view.",
-      ],
-      phoneTopics: [
-        { label: "Glasses privacy", percentage: 38 },
-        { label: "Phone controls", percentage: 24 },
-      ],
-      viewerCount: "1.8K",
-      widgetLabels: {
-        glassesPrivate: "Private information",
-        glassesSuggestion: "Agent suggestion",
-        phonePulse: "Stream pulse",
-        phoneSuggestion: "Say this next",
-        phoneTopics: "Chat is leaning into",
-        publicChat: "Latest chat",
-        publicHype: "Hype score",
-        publicSuggestion: "Next talking point",
-      },
-    },
-    updatedAt: now.toISOString(),
-  };
 }
