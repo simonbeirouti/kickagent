@@ -11,13 +11,15 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { useDemoOverlayState } from "@/lib/demo-overlay-store";
+import { useLiveOverlayState } from "@/lib/live-overlay-store";
 import type { OverlayState } from "@/lib/overlay-state";
 
 type PhonePanel = "brief" | "chat" | "summary";
 
-export function GlassesSurface({ initialState }: { readonly initialState: OverlayState }) {
-  const state = useDemoOverlayState(initialState);
+export function GlassesSurface() {
+  const liveState = useLiveOverlayState();
+  if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
+  const state = liveState.state;
   return (
     <main className="glasses-surface">
       <div className="glasses-vignette" aria-hidden />
@@ -49,9 +51,11 @@ export function GlassesSurface({ initialState }: { readonly initialState: Overla
   );
 }
 
-export function StreamerPhoneSurface({ initialState }: { readonly initialState: OverlayState }) {
-  const state = useDemoOverlayState(initialState);
+export function StreamerPhoneSurface() {
+  const liveState = useLiveOverlayState();
   const [panel, setPanel] = useState<PhonePanel>("brief");
+  if (!liveState.state) return <SurfaceStatus error={liveState.error} />;
+  const state = liveState.state;
   const topics = state.summary?.topics ?? [];
   return (
     <main className="phone-demo-stage">
@@ -143,6 +147,19 @@ export function StreamerPhoneSurface({ initialState }: { readonly initialState: 
             <span>{state.channel.category || "No category"}</span>
           </footer>
         </div>
+      </div>
+    </main>
+  );
+}
+
+function SurfaceStatus({ error }: { readonly error?: string }) {
+  return (
+    <main className="connect-screen">
+      <div className="connect-card">
+        <div className="kick-mark">K</div>
+        <p className="eyebrow">Live streamer companion</p>
+        <h1>{error ?? "Connecting to live stream…"}</h1>
+        {error ? <a className="connect-button" href="/api/auth/kick/start">Connect Kick<span aria-hidden>→</span></a> : null}
       </div>
     </main>
   );

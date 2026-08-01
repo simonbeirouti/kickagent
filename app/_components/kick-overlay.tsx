@@ -6,6 +6,7 @@ import {
   ExternalLinkIcon,
   GlassesIcon,
   GripVerticalIcon,
+  LogOutIcon,
   MessageCircleIcon,
   MonitorUpIcon,
   RadioIcon,
@@ -16,14 +17,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
-import {
-  publishDemoOverlayState,
-  useDemoOverlayState,
-} from "@/lib/demo-overlay-store";
+import { useLiveOverlayState } from "@/lib/live-overlay-store";
 import {
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
   WIDGET_DEFAULTS,
+  type ManagedScreen,
   type OverlayLayout,
   type WidgetKind,
   type WidgetPlacement,
@@ -36,8 +35,6 @@ interface DragPayload {
   readonly offsetX: number;
   readonly offsetY: number;
 }
-
-type ManagedScreen = "glasses" | "phone" | "public";
 
 const MANAGED_SCREENS: readonly {
   readonly dimensions: string;
@@ -58,15 +55,23 @@ const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
 };
 
 export function KickOverlay({
-  initialState,
+  accessToken,
   publicMode = false,
 }: {
-  readonly initialState: OverlayState;
+  readonly accessToken?: string;
   readonly publicMode?: boolean;
 }) {
-  const state = useDemoOverlayState(initialState);
+  const liveState = useLiveOverlayState({ accessToken, publicMode });
+  const [draftLayouts, setDraftLayouts] = useState<Partial<Record<ManagedScreen, OverlayLayout>>>({});
+  const [disconnecting, setDisconnecting] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [selectedScreen, setSelectedScreen] = useState<ManagedScreen>("public");
+
+  if (liveState.authenticated === undefined) return <LoadingScreen />;
+  if (!liveState.authenticated || !liveState.state) {
+    return publicMode ? <InvalidOverlayScreen /> : <ConnectScreen error={liveState.error} />;
+  }
+  const state = liveState.state;
 
   if (publicMode) {
     return (
@@ -81,18 +86,36 @@ export function KickOverlay({
   }
 
   const selectedScreenDetails = MANAGED_SCREENS.find((screen) => screen.id === selectedScreen)!;
-  const activeLayout = selectedScreen === "public"
-    ? state.screenLayouts?.public ?? state.layout
-    : state.screenLayouts?.[selectedScreen] ?? [];
+  const activeLayout = draftLayouts[selectedScreen]
+    ?? state.screenLayouts[selectedScreen]
+    ?? (selectedScreen === "public" ? state.layout : []);
   const saveActiveLayout = async (next: OverlayLayout) => {
+    setDraftLayouts((current) => ({ ...current, [selectedScreen]: next }));
     setSaveState("saving");
-    publishDemoOverlayState({
-      ...state,
-      layout: selectedScreen === "public" ? next : state.layout,
-      screenLayouts: { ...state.screenLayouts, [selectedScreen]: next },
-    });
-    setSaveState("saved");
-    window.setTimeout(() => setSaveState("idle"), 1_500);
+    try {
+      const response = await fetch("/api/overlay/layout", {
+        body: JSON.stringify({ layout: next, screen: selectedScreen }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      });
+      if (!response.ok) throw new Error("Could not save the screen layout.");
+      await liveState.refresh();
+      setDraftLayouts((current) => ({ ...current, [selectedScreen]: undefined }));
+      setSaveState("saved");
+      window.setTimeout(() => setSaveState("idle"), 1_500);
+    } catch {
+      setSaveState("idle");
+    }
+  };
+  const disconnect = async () => {
+    setDisconnecting(true);
+    try {
+      const response = await fetch("/api/auth/kick/disconnect", { method: "POST" });
+      if (!response.ok) throw new Error("Disconnect failed.");
+      window.location.reload();
+    } finally {
+      setDisconnecting(false);
+    }
   };
   return (
     <main className="dashboard-shell">
@@ -110,7 +133,15 @@ export function KickOverlay({
         </div>
         <div className="header-actions">
           <StatusPill live={state.live} />
-          <span className="demo-pill">Saved locally</span>
+          <button
+            aria-label="Disconnect Kick"
+            className="icon-button"
+            disabled={disconnecting}
+            onClick={() => void disconnect()}
+            type="button"
+          >
+            <LogOutIcon size={17} />
+          </button>
         </div>
       </header>
 
@@ -412,9 +443,20 @@ function energyLabel(score: number): string {
   return "Room is warming up";
 }
 
+function relativeTime(value: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 5) return "now";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`;
+}
+
 function ConnectScreen({ error }: { readonly error?: string }) {
+  const queryError = typeof window === "undefined"
+    ? undefined
+    : new URLSearchParams(window.location.search).get("error") ?? undefined;
   return (
-    <main className="connect-screen"><div className="connect-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Stay present. We’ll watch the room.</h1><p className="connect-copy">Get a fresh talking point every 30 seconds, keep the latest chat close, and never lose the energy of your stream.</p>{error ? <div className="connect-error">{error}</div> : null}<a className="connect-button" href="/api/auth/kick/start">Connect Kick<span aria-hidden>→</span></a><p className="privacy-note">Private to you. This companion never posts in your chat.</p></div></main>
+    <main className="connect-screen"><div className="connect-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Stay present. We’ll watch the room.</h1><p className="connect-copy">Get a fresh talking point after five messages or 30 seconds, keep the latest chat close, and never lose the energy of your stream.</p>{error || queryError ? <div className="connect-error">{error ?? formatConnectionError(queryError!)}</div> : null}<a className="connect-button" href="/api/auth/kick/start">Connect Kick<span aria-hidden>→</span></a><p className="privacy-note">Private to you. This companion never posts in your chat.</p></div></main>
   );
 }
 
@@ -424,14 +466,6 @@ function InvalidOverlayScreen() {
 
 function LoadingScreen() {
   return <main className="connect-screen"><div className="loading-pulse" /></main>;
-}
-
-function relativeTime(value: string): string {
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
-  if (seconds < 5) return "now";
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`;
 }
 
 function formatConnectionError(code: string): string {

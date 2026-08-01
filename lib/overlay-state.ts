@@ -1,4 +1,8 @@
-import { DEFAULT_OVERLAY_LAYOUT, type OverlayLayout } from "@/lib/overlay-layout";
+import {
+  DEFAULT_OVERLAY_LAYOUT,
+  type OverlayLayout,
+  type ScreenLayouts,
+} from "@/lib/overlay-layout";
 
 export interface OverlayState {
   readonly authenticated: true;
@@ -20,11 +24,7 @@ export interface OverlayState {
     readonly id: string;
     readonly username: string;
   }[];
-  readonly screenLayouts?: {
-    readonly glasses?: OverlayLayout;
-    readonly phone?: OverlayLayout;
-    readonly public?: OverlayLayout;
-  };
+  readonly screenLayouts: ScreenLayouts;
   readonly suggestion: {
     readonly basis: "chat" | "stream_context" | null;
     readonly generatedAt: string;

@@ -6,13 +6,21 @@ interface ChatIngestResult extends Record<string, unknown> {
   readonly connection_id: string | null;
   readonly connection_matched: boolean;
   readonly message_inserted: boolean;
+  readonly suggestion_message_count: number | null;
+}
+
+export interface ChatIngestOutcome {
+  readonly connectionId?: string;
+  readonly inserted: boolean;
+  readonly messageCount: number;
+  readonly shouldGenerateSuggestion: boolean;
 }
 
 export async function ingestChat(
   eventMessageId: string,
   eventType: string,
   input: unknown,
-): Promise<void> {
+): Promise<ChatIngestOutcome> {
   const event = kickChatEventSchema.parse(input);
   const createdAt = new Date(event.created_at);
   const rows = await query<ChatIngestResult>(
@@ -40,6 +48,12 @@ export async function ingestChat(
       ON CONFLICT DO NOTHING
       RETURNING
         connection_id, sender_user_id, sender_username, sender_profile_picture, created_at
+    ), cadence AS (
+      UPDATE kick_connections
+      SET suggestion_message_count = suggestion_message_count + 1,
+          updated_at = now()
+      WHERE id IN (SELECT connection_id FROM inserted_chat)
+      RETURNING id, suggestion_message_count
     ), member AS (
       INSERT INTO community_members (
         connection_id, kick_user_id, username, profile_picture,
@@ -76,7 +90,8 @@ export async function ingestChat(
     SELECT
       EXISTS (SELECT 1 FROM connection) AS connection_matched,
       (SELECT connection_id FROM inserted_chat LIMIT 1) AS connection_id,
-      EXISTS (SELECT 1 FROM inserted_chat) AS message_inserted`,
+      EXISTS (SELECT 1 FROM inserted_chat) AS message_inserted,
+      (SELECT suggestion_message_count FROM cadence LIMIT 1) AS suggestion_message_count`,
     [
       eventMessageId,
       eventType,
@@ -95,7 +110,9 @@ export async function ingestChat(
   if (!result?.connection_matched) {
     throw new Error(`No active Kick connection for broadcaster ${event.broadcaster.user_id}.`);
   }
-  if (!result.message_inserted || !result.connection_id) return;
+  if (!result.message_inserted || !result.connection_id) {
+    return { inserted: false, messageCount: 0, shouldGenerateSuggestion: false };
+  }
   await query(
     `DELETE FROM chat_messages
      WHERE connection_id = $1
@@ -108,4 +125,11 @@ export async function ingestChat(
        )`,
     [result.connection_id],
   );
+  const messageCount = result.suggestion_message_count ?? 0;
+  return {
+    connectionId: result.connection_id,
+    inserted: true,
+    messageCount,
+    shouldGenerateSuggestion: messageCount === 5,
+  };
 }
