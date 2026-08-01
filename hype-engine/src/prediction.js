@@ -8,7 +8,7 @@ export class Prediction {
     this.id = values.id ?? `prediction-${now}`;
     this.question = values.question ?? 'Will Neon hit 13,000 trophies this stream?';
     this.opensAt = values.opensAt ?? now;
-    this.locksAt = values.locksAt ?? now + 60_000;
+    this.locksAt = values.locksAt ?? now + 10_000;
     this.participantCount = values.participantCount ?? 0;
     this.options = (values.options ?? DEFAULT_OPTIONS).map((option) => ({ ...option }));
     this.votes = new Map();
@@ -61,5 +61,23 @@ export class Prediction {
       percentage: totalPoints === 0 ? 0 : Math.round((option.points / totalPoints) * 100),
     }));
     return { status: this.status(now), totalPoints, participantCount: this.participantCount, options };
+  }
+
+  settle(now = Date.now()) {
+    if (this.status(now) !== 'locked') return null;
+    const snapshot = this.snapshot(now);
+    const winningPoints = Math.max(...snapshot.options.map((option) => option.points));
+    const winners = snapshot.options.filter((option) => option.points === winningPoints);
+    const winningIds = new Set(winners.map((option) => option.id));
+    const winningViewers = [];
+
+    for (const [viewerId, ledger] of this.votes) {
+      const points = [...ledger]
+        .filter(([optionId]) => winningIds.has(optionId))
+        .reduce((sum, [, amount]) => sum + amount, 0);
+      if (points > 0) winningViewers.push({ viewerId, points });
+    }
+
+    return { settledAt: now, winners, winningViewers, isTie: winners.length > 1 };
   }
 }
