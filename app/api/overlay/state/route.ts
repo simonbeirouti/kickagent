@@ -18,6 +18,7 @@ import {
   statelessKickMode,
   statelessSessionFromRequest,
 } from "@/lib/session";
+import { createDemoOverlayState } from "@/lib/overlay-state";
 import { SUGGESTION_WORKFLOW_VERSION } from "@/lib/suggestion-cadence";
 import { kickSuggestionWorkflow } from "@/workflows/kick-suggestions";
 
@@ -43,6 +44,7 @@ interface AnalysisRow extends Record<string, unknown> {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const staticWidgets = createDemoOverlayState();
   const requestUrl = new URL(request.url);
   const publicOverlay = requestUrl.searchParams.get("public") === "overlay";
   const syncKick = requestUrl.searchParams.get("sync") === "kick";
@@ -68,7 +70,7 @@ export async function GET(request: Request): Promise<Response> {
     }
     return Response.json(
       {
-        actionBet: null,
+        actionBet: staticWidgets.actionBet,
         authenticated: true,
         channel: {
           category: channel.categoryName ?? null,
@@ -84,7 +86,7 @@ export async function GET(request: Request): Promise<Response> {
         layout:
           overlayAccess?.kind === "stateless" ? overlayAccess.layout : DEFAULT_OVERLAY_LAYOUT,
         messages: [],
-        prediction: null,
+        prediction: staticWidgets.prediction,
         screenLayouts: {
           public: overlayAccess?.kind === "stateless"
             ? overlayAccess.layout
@@ -165,7 +167,7 @@ export async function GET(request: Request): Promise<Response> {
     (!suggestion || Date.now() - generatedAt > 90_000 || latest?.status === "failed");
   return Response.json(
     {
-      actionBet: null,
+      actionBet: staticWidgets.actionBet,
       authenticated: true,
       channel: {
         category: connection.category_name,
@@ -185,7 +187,7 @@ export async function GET(request: Request): Promise<Response> {
         id: message.message_id,
         username: message.sender_username,
       })),
-      prediction: null,
+      prediction: staticWidgets.prediction,
       screenLayouts: parseScreenLayouts(
         connection.screen_layouts,
         parseOverlayLayout(connection.overlay_layout),

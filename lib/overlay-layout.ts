@@ -60,9 +60,11 @@ export const screenLayoutsSchema = z.object({
 export type ScreenLayouts = z.infer<typeof screenLayoutsSchema>;
 
 export const DEFAULT_OVERLAY_LAYOUT: OverlayLayout = [
-  { height: 10, id: "suggestion", kind: "suggestion", width: 14, x: 1, y: 2 },
-  { height: 6, id: "chat", kind: "chat", width: 8, x: 16, y: 1 },
-  { height: 5, id: "hype", kind: "hype", width: 8, x: 16, y: 8 },
+  { height: 7, id: "prediction", kind: "prediction", width: 9, x: 0, y: 0 },
+  { height: 6, id: "action-bet", kind: "actionBet", width: 9, x: 0, y: 8 },
+  { height: 7, id: "suggestion", kind: "suggestion", width: 8, x: 10, y: 0 },
+  { height: 6, id: "chat", kind: "chat", width: 5, x: 19, y: 0 },
+  { height: 6, id: "hype", kind: "hype", width: 14, x: 10, y: 8 },
 ];
 
 export const WIDGET_DEFAULTS: Readonly<Record<WidgetKind, WidgetPlacement>> = {
