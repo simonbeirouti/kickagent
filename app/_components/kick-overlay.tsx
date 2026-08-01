@@ -150,7 +150,7 @@ export function KickOverlay({
 
   if (liveState.authenticated === undefined) {
     return standaloneScreen
-      ? <main aria-label="Loading overlay" className="public-overlay-shell" />
+      ? <main aria-label="Loading overlay" className={`public-overlay-shell screen-${standaloneScreen}`} />
       : <LoadingScreen />;
   }
   if (!liveState.authenticated || !liveState.state) {
@@ -162,10 +162,10 @@ export function KickOverlay({
     const layout = state.screenLayouts[standaloneScreen]
       ?? (standaloneScreen === "public" ? state.layout : []);
     return (
-      <main className="public-overlay-shell">
+      <main className={`public-overlay-shell screen-${standaloneScreen}`}>
         <OverlayCanvas
           layout={layout}
-          publicMode
+          publicMode={true}
           state={state}
         />
       </main>

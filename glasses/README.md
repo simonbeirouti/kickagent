@@ -46,8 +46,9 @@ while real data drives.
 
 ### URL params
 
-- `?transparent` — drops the background so it composites over camera/game
-  capture in OBS (keeps a bit of vignette/scanline for the glasses look)
+- The background is pure black by default. This appears transparent on XREAL
+  because black pixels emit no light and avoids a browser flattening alpha onto
+  a white viewport. Use `?transparent` only for an alpha-aware OBS source.
 - `?speed=2` — multiplies the pace of every simulated event (0.1–10)
 - `?seed=abc` — deterministic run, same sequence every reload (useful for demos)
 - `?rows=2..4` — rows in the Top Predictions panel (auto-compacts layout at 3–4)

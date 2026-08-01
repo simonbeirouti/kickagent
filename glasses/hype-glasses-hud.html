@@ -29,10 +29,10 @@
       radial-gradient(circle at 20% 80%, rgba(83,31,141,.08), transparent 34%),
       linear-gradient(180deg,#020504,#000);
   }
-  /* OBS: ?transparent — drops the backdrop so the HUD composites over video */
-  html.transparent,html.transparent body{background:transparent}
-  html.transparent .vignette{opacity:.45}
-  html.transparent .scanlines{opacity:.06}
+  /* Opt-in alpha for OBS. Browsers flatten alpha against white, while pure
+     black emits no light on glasses such as XREAL and appears transparent. */
+  html.transparent,html.transparent body{background:rgba(0,0,0,0)}
+  html.transparent .vignette,html.transparent .scanlines{display:none}
 
   .canvas{position:relative;width:100vw;height:100vh;overflow:hidden}
   .vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.28) 82%,rgba(0,0,0,.72) 100%);z-index:50}
@@ -185,7 +185,7 @@
 /* ============================================================
    Hype Tracker HUD — simulated data engine
    URL params:
-     ?transparent      transparent background (OBS browser source)
+     ?transparent      transparent background for an alpha-aware OBS source
      ?speed=2          time multiplier for all events (0.1 – 10)
      ?seed=abc         deterministic run (same sequence every reload)
      ?rows=3           how many rows in TOP PREDICTIONS (2–4)

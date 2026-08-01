@@ -82,7 +82,7 @@
 
 html {
   height: 100%;
-  background: transparent;
+  background: rgb(0 0 0 / 0%);
 }
 
 body {
@@ -100,7 +100,8 @@ html:has(.public-overlay-shell),
 body:has(.public-overlay-shell),
 body:has(.glasses-hud) {
   overflow: hidden;
-  background: transparent;
+  background-color: rgb(0 0 0 / 0%);
+  background-image: none;
 }
 
 .surface-launcher {
@@ -2254,7 +2255,13 @@ body:has(.glasses-hud) {
   display: grid;
   overflow: hidden;
   place-items: center;
-  background: transparent;
+  background: rgb(0 0 0 / 0%);
+}
+
+/* XREAL and ordinary browser windows flatten CSS transparency against white.
+   Pure black emits no light on the glasses, so it is the correct HUD canvas. */
+.public-overlay-shell.screen-glasses {
+  background: #000;
 }
 
 .overlay-canvas.public {
