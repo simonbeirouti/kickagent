@@ -114,3 +114,14 @@ export const suggestionSchema = z.object({
 });
 
 export type Suggestion = z.infer<typeof suggestionSchema>;
+
+export const chatSummarySchema = z.object({
+  interest: z.enum(["low", "medium", "high"]),
+  purpose: z.string().trim().min(1).max(160),
+  requests: z.array(z.string().trim().min(1).max(120)).max(5),
+  summary: z.string().trim().min(1).max(280),
+  suggestions: z.array(z.string().trim().min(1).max(140)).min(1).max(3),
+  tone: z.string().trim().min(1).max(60),
+});
+
+export type ChatSummary = z.infer<typeof chatSummarySchema>;
