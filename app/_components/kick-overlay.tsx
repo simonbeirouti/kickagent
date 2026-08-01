@@ -3,7 +3,6 @@
 import {
   ActivityIcon,
   Clock3Icon,
-  ExternalLinkIcon,
   GripVerticalIcon,
   LogOutIcon,
   MessageCircleIcon,
@@ -14,11 +13,16 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
+import { DashboardContentManager } from "@/app/_components/dashboard-content-manager";
+import {
+  publishDemoOverlayState,
+  readDemoOverlayState,
+  subscribeToDemoOverlayState,
+} from "@/lib/demo-overlay-store";
 import {
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
   WIDGET_DEFAULTS,
-  parseOverlayLayout,
   type OverlayLayout,
   type WidgetKind,
   type WidgetPlacement,
@@ -69,7 +73,8 @@ export function KickOverlay({
           return;
         }
         if (!response.ok) throw new Error("Overlay update failed.");
-        const next = (await response.json()) as OverlayState;
+        const received = (await response.json()) as OverlayState;
+        const next = demoMode ? readDemoOverlayState(received) : received;
         setState(next);
         if (!publicMode) setDraftLayout((current) => current ?? next.layout);
         setAuthenticated(true);
@@ -93,11 +98,20 @@ export function KickOverlay({
     return () => window.clearInterval(timer);
   }, [publicMode, refresh]);
 
+  useEffect(() => {
+    if (!demoMode) return;
+    return subscribeToDemoOverlayState((next) => {
+      setState(next);
+      setDraftLayout(next.layout);
+      setAuthenticated(true);
+    });
+  }, [demoMode]);
+
   const saveLayout = async (layout: OverlayLayout) => {
     setDraftLayout(layout);
     setSaveState("saving");
     if (demoMode) {
-      window.localStorage.setItem("kickagent-demo-layout", JSON.stringify(layout));
+      if (state) setState(publishDemoOverlayState({ ...state, layout }));
       setSaveState("saved");
       window.setTimeout(() => setSaveState("idle"), 1_500);
       return;
@@ -140,7 +154,7 @@ export function KickOverlay({
     return (
       <main className="public-overlay-shell">
         <OverlayCanvas
-          layout={demoMode ? readDemoLayout(state.layout) : state.layout}
+          layout={state.layout}
           publicMode
           state={state}
         />
@@ -148,7 +162,7 @@ export function KickOverlay({
     );
   }
 
-  const layout = draftLayout ?? (demoMode ? readDemoLayout(state.layout) : state.layout);
+  const layout = draftLayout ?? state.layout;
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
@@ -180,75 +194,101 @@ export function KickOverlay({
         </div>
       </header>
 
-      <nav aria-label="Demo surfaces" className="surface-launcher">
-        <SurfaceLink description="Private cues in your eyeline" href="/glasses" label="Glasses" />
-        <SurfaceLink description="The full streamer brief" href="/streamer" label="Streamer phone" />
-        <SurfaceLink description="What the audience sees" href="/public/overlay" label="Public overlay" />
-      </nav>
-
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <div className="editor-layout">
-        <aside className="widget-library">
-          <div>
-            <p className="eyebrow">Widgets</p>
-            <h2>Build your screen</h2>
-            <p className="library-copy">Drag a widget onto the canvas, then place it where you want.</p>
-          </div>
-          <div className="library-list">
-            {(["suggestion", "chat", "hype"] as const).map((kind) => {
-              const added = layout.some((item) => item.kind === kind);
-              return (
-                <button
-                  className="library-widget"
-                  disabled={added}
-                  draggable={!added}
-                  key={kind}
-                  onClick={() => {
-                    if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
-                  }}
-                  onDragStart={(event) => startLibraryDrag(event, kind)}
-                  type="button"
-                >
-                  <WidgetKindIcon kind={kind} />
-                  <span>{WIDGET_LABELS[kind]}</span>
-                  <GripVerticalIcon className="library-grip" size={16} />
-                </button>
-              );
-            })}
-          </div>
-          <p className="save-indicator" aria-live="polite">
-            {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
-          </p>
-        </aside>
-
-        <section className="canvas-panel">
-          <div className="canvas-heading">
-            <div>
-              <p className="eyebrow">Browser source preview</p>
-              <h2>1920 × 1080</h2>
+      {demoMode ? (
+        <DashboardContentManager
+          onChange={(next) => setState(publishDemoOverlayState(next))}
+          publicEditor={(
+            <div className="editor-layout manager-public-editor">
+              <WidgetLibrary layout={layout} saveLayout={saveLayout} saveState={saveState} />
+              <section className="canvas-panel">
+                <div className="canvas-heading">
+                  <div>
+                    <p className="eyebrow">Edit widgets directly</p>
+                    <h2>1920 × 1080</h2>
+                  </div>
+                  <span>Drag to reposition</span>
+                </div>
+                <OverlayCanvas
+                  layout={layout}
+                  onLayoutChange={(next) => void saveLayout(next)}
+                  onStateChange={(next) => setState(publishDemoOverlayState(next))}
+                  state={state}
+                />
+              </section>
             </div>
-            <span>Drag to reposition</span>
-          </div>
-          <OverlayCanvas
-            layout={layout}
-            onLayoutChange={(next) => void saveLayout(next)}
-            state={state}
-          />
-        </section>
-      </div>
+          )}
+          state={state}
+        />
+      ) : (
+        <div className="editor-layout">
+          <WidgetLibrary layout={layout} saveLayout={saveLayout} saveState={saveState} />
+          <section className="canvas-panel">
+            <div className="canvas-heading"><h2>1920 × 1080</h2><span>Drag to reposition</span></div>
+            <OverlayCanvas layout={layout} onLayoutChange={(next) => void saveLayout(next)} state={state} />
+          </section>
+        </div>
+      )}
     </main>
+  );
+}
+
+function WidgetLibrary({
+  layout,
+  saveLayout,
+  saveState,
+}: {
+  readonly layout: OverlayLayout;
+  readonly saveLayout: (layout: OverlayLayout) => Promise<void>;
+  readonly saveState: "idle" | "saving" | "saved";
+}) {
+  return (
+    <aside className="widget-library">
+      <div>
+        <p className="eyebrow">Widgets</p>
+        <h2>Build your screen</h2>
+        <p className="library-copy">Add a widget, then edit it directly on the canvas.</p>
+      </div>
+      <div className="library-list">
+        {(["suggestion", "chat", "hype"] as const).map((kind) => {
+          const added = layout.some((item) => item.kind === kind);
+          return (
+            <button
+              className="library-widget"
+              disabled={added}
+              draggable={!added}
+              key={kind}
+              onClick={() => {
+                if (!added) void saveLayout([...layout, WIDGET_DEFAULTS[kind]]);
+              }}
+              onDragStart={(event) => startLibraryDrag(event, kind)}
+              type="button"
+            >
+              <WidgetKindIcon kind={kind} />
+              <span>{WIDGET_LABELS[kind]}</span>
+              <GripVerticalIcon className="library-grip" size={16} />
+            </button>
+          );
+        })}
+      </div>
+      <p className="save-indicator" aria-live="polite">
+        {saveState === "saving" ? "Saving layout…" : saveState === "saved" ? "Layout saved" : "24 × 14 snap grid"}
+      </p>
+    </aside>
   );
 }
 
 function OverlayCanvas({
   layout,
   onLayoutChange,
+  onStateChange,
   publicMode = false,
   state,
 }: {
   readonly layout: OverlayLayout;
   readonly onLayoutChange?: (layout: OverlayLayout) => void;
+  readonly onStateChange?: (state: OverlayState) => void;
   readonly publicMode?: boolean;
   readonly state: OverlayState;
 }) {
@@ -301,7 +341,12 @@ function OverlayCanvas({
               <Trash2Icon size={13} />
             </button>
           ) : null}
-          <WidgetContent kind={placement.kind} state={state} />
+          <WidgetContent
+            editable={Boolean(onStateChange)}
+            kind={placement.kind}
+            onStateChange={onStateChange}
+            state={state}
+          />
         </article>
       ))}
       {!publicMode && layout.length === 0 ? (
@@ -445,16 +490,6 @@ function placementStyle(placement: WidgetPlacement): CSSProperties {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
-}
-
-function readDemoLayout(fallback: OverlayLayout): OverlayLayout {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const saved = window.localStorage.getItem("kickagent-demo-layout");
-    return saved ? parseOverlayLayout(JSON.parse(saved)) : fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 function suggestionText(state: OverlayState): string {

@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function PublicOverlayPage() {
-  return <KickOverlay demoMode publicMode />;
+  return <KickOverlay publicMode />;
 }

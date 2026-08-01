@@ -159,6 +159,237 @@ body:has(.glasses-surface) {
   font-size: 0.68rem;
 }
 
+.content-manager {
+  width: min(1500px, 100%);
+  margin: 0 auto 1rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 1.25rem;
+  background: rgb(21 24 22 / 88%);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 20%);
+}
+
+.content-manager-header {
+  display: flex;
+  min-height: 6.5rem;
+  padding: 1.2rem 1.35rem;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+}
+
+.content-manager-header h2 {
+  margin: 0.2rem 0 0;
+  font-size: 1.2rem;
+  letter-spacing: -0.025em;
+}
+
+.content-manager-header p:last-child {
+  margin: 0.35rem 0 0;
+  color: #747c76;
+  font-size: 0.7rem;
+}
+
+.content-manager-status {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.content-manager-status span,
+.content-manager-status button {
+  display: flex;
+  min-height: 2.1rem;
+  padding: 0 0.7rem;
+  gap: 0.35rem;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 3%);
+  color: #747c76;
+  font-size: 0.64rem;
+}
+
+.content-manager-status span {
+  border-color: rgb(83 252 24 / 17%);
+  color: #8fe36f;
+}
+
+.content-manager-status button {
+  cursor: pointer;
+}
+
+.content-manager-body {
+  display: grid;
+  grid-template-columns: 14.5rem minmax(0, 1fr);
+  min-height: 28rem;
+}
+
+.content-surface-tabs {
+  display: grid;
+  padding: 0.85rem;
+  align-content: start;
+  gap: 0.45rem;
+  border-right: 1px solid rgb(255 255 255 / 7%);
+  background: rgb(0 0 0 / 8%);
+}
+
+.content-surface-tabs button {
+  display: grid;
+  min-height: 4.2rem;
+  padding: 0.75rem;
+  grid-template-columns: 1.5rem 1fr;
+  column-gap: 0.45rem;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: #858d87;
+  cursor: pointer;
+  text-align: left;
+}
+
+.content-surface-tabs button svg {
+  grid-row: span 2;
+}
+
+.content-surface-tabs button span {
+  color: #cbd1cc;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.content-surface-tabs button small {
+  color: #5d655f;
+  font-size: 0.58rem;
+}
+
+.content-surface-tabs button.active {
+  border-color: rgb(83 252 24 / 16%);
+  background: rgb(83 252 24 / 7%);
+  color: #77f94d;
+}
+
+.content-fields {
+  display: grid;
+  padding: 1.1rem;
+  align-content: start;
+  gap: 0.8rem;
+}
+
+.manager-field-group {
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 0.9rem;
+  background: rgb(255 255 255 / 2%);
+}
+
+.manager-field-group legend {
+  padding: 0 0.35rem;
+  color: #dce1dd;
+  font-size: 0.73rem;
+  font-weight: 720;
+}
+
+.manager-field-group > p {
+  margin: 0 0 0.9rem;
+  color: #646c66;
+  font-size: 0.62rem;
+}
+
+.manager-field-group > div {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.manager-field,
+.manager-field-grid,
+.manager-topic-row,
+.manager-message-row {
+  min-width: 0;
+}
+
+.manager-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.manager-field > span {
+  color: #7f8881;
+  font-size: 0.6rem;
+  font-weight: 680;
+  letter-spacing: 0.035em;
+}
+
+.manager-field input,
+.manager-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.65rem 0.72rem;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.62rem;
+  outline: none;
+  background: #0f1210;
+  color: #dce1dd;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  resize: vertical;
+  transition: 130ms ease;
+}
+
+.manager-field input:focus,
+.manager-field textarea:focus {
+  border-color: rgb(83 252 24 / 38%);
+  box-shadow: 0 0 0 3px rgb(83 252 24 / 7%);
+}
+
+.manager-field input[type="range"] {
+  min-height: 2.55rem;
+  padding: 0 0.3rem;
+  accent-color: #53fc18;
+}
+
+.manager-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.manager-field-grid.compact {
+  grid-template-columns: minmax(8rem, 0.35fr) minmax(14rem, 1fr);
+}
+
+.manager-topic-row,
+.manager-message-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem;
+  gap: 0.65rem;
+  align-items: end;
+}
+
+.manager-message-row {
+  grid-template-columns: minmax(8rem, 0.3fr) minmax(0, 1fr);
+}
+
+.percentage-field > div {
+  position: relative;
+}
+
+.percentage-field input {
+  padding-right: 2rem;
+}
+
+.percentage-field b {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  color: #667068;
+  font-size: 0.65rem;
+  transform: translateY(-50%);
+}
+
 /* Glasses is deliberately sparse: glanceable cues sit at the edge of vision. */
 .glasses-surface {
   position: relative;
@@ -666,8 +897,11 @@ body:has(.glasses-surface) {
   font-size: 0.6rem;
 }
 
-.phone-topic-row.secondary {
-  margin-top: 0.65rem;
+.phone-topic-item {
+  margin-top: 0.8rem;
+}
+
+.phone-topic-item.secondary {
   color: #848d86;
 }
 
@@ -762,6 +996,47 @@ body:has(.glasses-surface) {
 
 @media (max-width: 760px) {
   .surface-launcher {
+    grid-template-columns: 1fr;
+  }
+
+  .content-manager-header {
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .content-manager-status span {
+    display: none;
+  }
+
+  .content-manager-body {
+    grid-template-columns: 1fr;
+  }
+
+  .content-surface-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-right: 0;
+    border-bottom: 1px solid rgb(255 255 255 / 7%);
+  }
+
+  .content-surface-tabs button {
+    min-height: 3rem;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .content-surface-tabs button svg {
+    display: none;
+  }
+
+  .content-surface-tabs button small {
+    display: none;
+  }
+
+  .manager-field-grid,
+  .manager-field-grid.compact,
+  .manager-topic-row,
+  .manager-message-row {
     grid-template-columns: 1fr;
   }
 

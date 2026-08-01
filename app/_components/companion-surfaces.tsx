@@ -17,19 +17,17 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { useDemoOverlayState } from "@/lib/demo-overlay-store";
 import type { OverlayState } from "@/lib/overlay-state";
-
-const GLASSES_CUES = [
-  "Ask chat what information they would want in their glasses during a live stream.",
-  "Mika's message is getting traction — ask the room whether the glasses should feel invisible or expressive.",
-  "Pause after the reveal and let chat react before moving to the phone view.",
-] as const;
 
 type PhonePanel = "brief" | "chat" | "notes";
 
-export function GlassesSurface({ state }: { readonly state: OverlayState }) {
+export function GlassesSurface({ state: initialState }: { readonly state: OverlayState }) {
+  const state = useDemoOverlayState(initialState);
   const [cueIndex, setCueIndex] = useState(0);
   const privateContext = state.privateContext;
+  const glassesCues = state.surfaceContent?.glassesCues ?? [];
+  const activeCue = glassesCues[cueIndex] ?? state.suggestion?.text ?? "Waiting for a suggestion…";
 
   return (
     <main className="glasses-surface">
@@ -54,11 +52,11 @@ export function GlassesSurface({ state }: { readonly state: OverlayState }) {
           <span><SparklesIcon size={16} /> Agent suggestion</span>
           <span className="glasses-listening"><i /> Listening</span>
         </div>
-        <p>{GLASSES_CUES[cueIndex]}</p>
+        <p>{activeCue}</p>
         <footer>
           <span>Based on live chat</span>
           <button
-            onClick={() => setCueIndex((current) => (current + 1) % GLASSES_CUES.length)}
+            onClick={() => setCueIndex((current) => (current + 1) % Math.max(1, glassesCues.length))}
             type="button"
           >
             Next cue <ChevronRightIcon size={15} />
@@ -76,7 +74,8 @@ export function GlassesSurface({ state }: { readonly state: OverlayState }) {
   );
 }
 
-export function StreamerPhoneSurface({ state }: { readonly state: OverlayState }) {
+export function StreamerPhoneSurface({ state: initialState }: { readonly state: OverlayState }) {
+  const state = useDemoOverlayState(initialState);
   const [panel, setPanel] = useState<PhonePanel>("brief");
   const [suggestionUsed, setSuggestionUsed] = useState(false);
   const privateContext = state.privateContext;
@@ -106,7 +105,7 @@ export function StreamerPhoneSurface({ state }: { readonly state: OverlayState }
                 <i key={index} style={{ height: `${height}%` }} />
               ))}
             </div>
-            <span className="phone-viewers"><UsersIcon size={13} /> 1.8K</span>
+            <span className="phone-viewers"><UsersIcon size={13} /> {state.surfaceContent?.viewerCount}</span>
           </section>
 
           <nav aria-label="Phone information panels" className="phone-tabs">
@@ -143,9 +142,12 @@ export function StreamerPhoneSurface({ state }: { readonly state: OverlayState }
                 </section>
                 <section className="phone-topic-card">
                   <span className="phone-section-label"><ZapIcon size={13} /> Chat is leaning into</span>
-                  <div className="phone-topic-row"><strong>Glasses privacy</strong><span>38%</span></div>
-                  <div className="phone-topic-meter"><i /></div>
-                  <div className="phone-topic-row secondary"><strong>Phone controls</strong><span>24%</span></div>
+                  {(state.surfaceContent?.phoneTopics ?? []).map((topic, index) => (
+                    <div className={index === 0 ? "phone-topic-item" : "phone-topic-item secondary"} key={`${index}-${topic.label}`}>
+                      <div className="phone-topic-row"><strong>{topic.label}</strong><span>{topic.percentage}%</span></div>
+                      <div className="phone-topic-meter"><i style={{ width: `${topic.percentage}%` }} /></div>
+                    </div>
+                  ))}
                 </section>
               </>
             ) : null}
