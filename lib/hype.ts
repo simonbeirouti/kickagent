@@ -3,7 +3,7 @@ import { TopicTracker } from "@/hype-engine/src/topics.js";
 
 export type HypeTrend = "falling" | "rising" | "steady";
 
-export interface HypeChatRow {
+export interface HypeChatRow extends Record<string, unknown> {
   readonly content: string;
   readonly created_at: string;
   readonly message_id: string;
@@ -62,8 +62,10 @@ export function computeHypeSnapshot(rows: readonly HypeChatRow[], asOf: number):
     topTopics: topics.top(TOP_TOPIC_COUNT, asOf).map((topic) => ({
       mentions: topic.mentions,
       topic: topic.topic,
-      trend: topic.trend,
+      // hype-engine/src/*.js is untyped: TS's JS inference widens the ternary'd
+      // trend field to `string` instead of the literal union it actually returns.
+      trend: topic.trend as HypeTrend,
     })),
-    trend: state.trend,
+    trend: state.trend as HypeTrend,
   };
 }
