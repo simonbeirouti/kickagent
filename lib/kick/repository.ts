@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "@/lib/security";
 import type { KickChannel, KickProfile } from "@/lib/kick/oauth";
 import type { KickToken } from "@/lib/kick/types";
 import type { ManagedScreen, OverlayLayout } from "@/lib/overlay-layout";
+import { SUGGESTION_WORKFLOW_VERSION } from "@/lib/suggestion-cadence";
 
 export interface ConnectionRecord extends Record<string, unknown> {
   readonly access_token_encrypted: string;
@@ -28,6 +29,7 @@ export interface ConnectionRecord extends Record<string, unknown> {
   readonly suggestion_message_count: number;
   readonly suggestion_next_at: string;
   readonly suggestion_window_start: string;
+  readonly suggestion_workflow_version: number;
 }
 
 export async function updateOverlayLayout(
@@ -37,8 +39,8 @@ export async function updateOverlayLayout(
 ): Promise<void> {
   await query(
     `UPDATE kick_connections
-     SET screen_layouts = jsonb_set(screen_layouts, ARRAY[$2], $3::jsonb, true),
-         overlay_layout = CASE WHEN $2 = 'public' THEN $3::jsonb ELSE overlay_layout END,
+     SET screen_layouts = jsonb_set(screen_layouts, ARRAY[$2], $3::text::jsonb, true),
+         overlay_layout = CASE WHEN $2 = 'public' THEN $3::text::jsonb ELSE overlay_layout END,
          updated_at = now()
      WHERE id = $1 AND active = true`,
     [connectionId, screen, JSON.stringify(layout)],
@@ -82,10 +84,10 @@ export async function upsertKickConnection(input: {
       id, kick_user_id, email, display_name, profile_picture, channel_slug,
       access_token_encrypted, refresh_token_encrypted, token_expires_at, scopes,
       subscription_ids, active, is_live, stream_title, category_name, category_id,
-      workflow_generation, updated_at
+      workflow_generation, suggestion_workflow_version, updated_at
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11::text[], true,
-      $12, $13, $14, $15, $16, now()
+      $12, $13, $14, $15, $16, $17, now()
     )
     ON CONFLICT (kick_user_id) DO UPDATE SET
       email = EXCLUDED.email,
@@ -104,6 +106,7 @@ export async function upsertKickConnection(input: {
       category_id = EXCLUDED.category_id,
       token_refresh_started_at = NULL,
       workflow_generation = EXCLUDED.workflow_generation,
+      suggestion_workflow_version = EXCLUDED.suggestion_workflow_version,
       suggestion_message_count = 0,
       suggestion_next_at = now() + interval '30 seconds',
       suggestion_window_start = now(),
@@ -126,7 +129,24 @@ export async function upsertKickConnection(input: {
       input.channel.categoryName ?? null,
       input.channel.categoryId ?? null,
       nextGeneration,
+      SUGGESTION_WORKFLOW_VERSION,
     ],
+  );
+  return rows[0];
+}
+
+export async function upgradeSuggestionWorkflow(
+  connectionId: string,
+): Promise<ConnectionRecord | undefined> {
+  const rows = await query<ConnectionRecord>(
+    `UPDATE kick_connections SET
+       workflow_generation = workflow_generation + 1,
+       suggestion_workflow_version = $2,
+       suggestion_next_at = LEAST(suggestion_next_at, now() + interval '30 seconds'),
+       updated_at = now()
+     WHERE id = $1 AND active = true AND suggestion_workflow_version < $2
+     RETURNING *`,
+    [connectionId, SUGGESTION_WORKFLOW_VERSION],
   );
   return rows[0];
 }

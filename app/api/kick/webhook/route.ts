@@ -1,14 +1,17 @@
 import { query } from "@/lib/db";
 import { start } from "workflow/api";
 import { ingestChat } from "@/lib/kick/ingestion";
-import { findConnectionById } from "@/lib/kick/repository";
+import { findConnectionById, upgradeSuggestionWorkflow } from "@/lib/kick/repository";
 import {
   kickChatEventSchema,
   kickLivestreamMetadataEventSchema,
   kickLivestreamStatusEventSchema,
 } from "@/lib/kick/types";
 import { verifyKickWebhook } from "@/lib/kick/webhook";
-import { kickMessageSuggestionWorkflow } from "@/workflows/kick-suggestions";
+import {
+  kickMessageSuggestionWorkflow,
+  kickSuggestionWorkflow,
+} from "@/workflows/kick-suggestions";
 
 export const runtime = "nodejs";
 
@@ -53,6 +56,15 @@ export async function POST(request: Request): Promise<Response> {
           messageId: event.message_id,
           username: event.sender.username ?? "Anonymous",
         });
+        const upgradedConnection = outcome.connectionId
+          ? await upgradeSuggestionWorkflow(outcome.connectionId)
+          : undefined;
+        if (upgradedConnection) {
+          await start(kickSuggestionWorkflow, [
+            upgradedConnection.id,
+            upgradedConnection.workflow_generation,
+          ]);
+        }
         if (outcome.shouldGenerateSuggestion && outcome.connectionId) {
           const connection = await findConnectionById(outcome.connectionId);
           if (connection?.active) {

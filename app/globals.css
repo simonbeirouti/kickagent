@@ -82,6 +82,7 @@
 
 html {
   height: 100%;
+  background: rgb(0 0 0 / 0%);
 }
 
 body {
@@ -95,9 +96,12 @@ body {
   font-family: var(--font-sans);
 }
 
+html:has(.public-overlay-shell),
 body:has(.public-overlay-shell),
 body:has(.glasses-hud) {
-  background: transparent;
+  overflow: hidden;
+  background-color: rgb(0 0 0 / 0%);
+  background-image: none;
 }
 
 .surface-launcher {
@@ -2245,15 +2249,25 @@ body:has(.glasses-hud) {
   border-radius: 2rem;
 }
 
-.public-overlay-shell,
-.overlay-canvas.public {
-  width: 1920px;
-  height: 1080px;
+.public-overlay-shell {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: rgb(0 0 0 / 0%);
 }
 
-.public-overlay-shell {
-  overflow: hidden;
-  background: transparent;
+/* XREAL and ordinary browser windows flatten CSS transparency against white.
+   Pure black emits no light on the glasses, so it is the correct HUD canvas. */
+.public-overlay-shell.screen-glasses {
+  background: #000;
+}
+
+.overlay-canvas.public {
+  width: min(100vw, 177.7778vh);
+  aspect-ratio: 16 / 9;
+  flex: none;
 }
 
 .canvas-widget {
@@ -2264,6 +2278,16 @@ body:has(.glasses-hud) {
   border-radius: clamp(0.45rem, 2.5cqw, 1.25rem);
   background: rgb(21 24 22 / 92%);
   box-shadow: 0 22px 70px rgb(0 0 0 / 24%);
+}
+
+.canvas-widget.widget-suggestion,
+.canvas-widget.widget-chat {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  outline: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
 }
 
 .canvas-widget.editable {
@@ -2305,13 +2329,20 @@ body:has(.glasses-hud) {
 }
 
 .canvas-widget .suggestion-content {
+  display: flex;
   min-height: 0;
-  padding: 5% 7%;
+  height: 100%;
+  padding: 5%;
+  align-items: center;
   flex: 1;
 }
 
 .canvas-widget .suggestion-content p {
-  font-size: clamp(0.7rem, 7cqw, 4.3rem);
+  max-width: none;
+  font-size: clamp(0.7rem, 8cqw, 5rem);
+  font-weight: 650;
+  line-height: 1.05;
+  text-shadow: 0 0.1em 0.45em rgb(0 0 0 / 85%);
 }
 
 .canvas-widget .live-cue {
@@ -2349,20 +2380,38 @@ body:has(.glasses-hud) {
 }
 
 .canvas-widget .message-list {
+  display: flex;
   min-height: 0;
-  padding: 2% 5% 4%;
+  padding: 1.5%;
+  gap: 3%;
+  flex-direction: column;
   flex: 1;
 }
 
 .canvas-widget .chat-message {
-  padding: 2.5% 0;
-  grid-template-columns: minmax(0, 0.32fr) minmax(0, 1fr) 2em;
+  padding: 3.5% 4%;
+  border: 1px solid rgb(255 255 255 / 62%);
+  border-radius: clamp(0.4rem, 2.5cqw, 0.85rem);
+  background: rgb(247 249 247 / 92%);
+  box-shadow: 0 0.7rem 2rem rgb(0 0 0 / 18%);
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) 2em;
   font-size: clamp(0.4rem, 2.8cqw, 0.82rem);
 }
 
-.canvas-widget .empty-messages {
-  min-height: 100%;
-  font-size: clamp(0.4rem, 2.8cqw, 0.8rem);
+.canvas-widget .chat-message:last-child {
+  border-bottom: 1px solid rgb(255 255 255 / 62%);
+}
+
+.canvas-widget .chat-user {
+  color: #276c20;
+}
+
+.canvas-widget .chat-copy {
+  color: #182019;
+}
+
+.canvas-widget .chat-message time {
+  color: #69716a;
 }
 
 .canvas-widget .hype-content {

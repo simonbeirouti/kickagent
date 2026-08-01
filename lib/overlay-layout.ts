@@ -84,13 +84,28 @@ export const WIDGET_DEFAULTS: Readonly<Record<WidgetKind, WidgetPlacement>> = {
 };
 
 export function parseOverlayLayout(value: unknown): OverlayLayout {
-  const parsed = overlayLayoutSchema.safeParse(value);
+  const parsed = overlayLayoutSchema.safeParse(parseJsonString(value));
   return parsed.success ? parsed.data : DEFAULT_OVERLAY_LAYOUT;
 }
 
 export function parseScreenLayouts(value: unknown, publicLayout: OverlayLayout): ScreenLayouts {
-  const parsed = screenLayoutsSchema.safeParse(value);
+  const candidate = parseJsonString(value);
+  const normalized = candidate && typeof candidate === "object" && !Array.isArray(candidate)
+    ? Object.fromEntries(
+        Object.entries(candidate).map(([screen, layout]) => [screen, parseJsonString(layout)]),
+      )
+    : candidate;
+  const parsed = screenLayoutsSchema.safeParse(normalized);
   return parsed.success ? { ...parsed.data, public: parsed.data.public ?? publicLayout } : {
     public: publicLayout,
   };
+}
+
+function parseJsonString(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
 }

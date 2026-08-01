@@ -1,11 +1,9 @@
 import { sleep } from "workflow";
 import { cleanupExpiredData as deleteExpiredData } from "@/lib/cleanup";
-import { appUrl } from "@/lib/env";
 import { query } from "@/lib/db";
+import { generateSuggestion } from "@/lib/generate-suggestion";
 import { findConnectionById } from "@/lib/kick/repository";
-import { signInternalJwt } from "@/lib/security";
 import {
-  suggestionGenerationResponseSchema,
   type PromptChatMessage,
   type SuggestionGenerationRequest,
 } from "@/lib/suggestions";
@@ -113,7 +111,11 @@ async function claimSuggestionTrigger(
        FOR UPDATE
      ), claimed AS (
        UPDATE kick_connections AS connection SET
-         suggestion_message_count = 0,
+         suggestion_message_count = CASE
+           WHEN $3 = 'message_count'
+             THEN GREATEST(connection.suggestion_message_count - 5, 0)
+           ELSE 0
+         END,
          suggestion_window_start = clock_timestamp(),
          suggestion_next_at = clock_timestamp() + interval '30 seconds',
          updated_at = now()
@@ -171,8 +173,10 @@ async function analyzeWindow(
       `SELECT message_id, sender_username, content, created_at
        FROM chat_messages
        WHERE connection_id = $1
+         AND ingested_at >= $2
+         AND ingested_at < $3
        ORDER BY created_at DESC, ingested_at DESC LIMIT 5`,
-      [connectionId],
+      [connectionId, windowStart, windowEnd],
     ),
     query<SuggestionRow>(
       `SELECT suggestion FROM analysis_windows
@@ -196,7 +200,7 @@ async function analyzeWindow(
     windowStart,
   });
   const startedAt = Date.now();
-  const statement = await requestSuggestion(connectionId, suggestionRequest);
+  const statement = await generateSuggestion(suggestionRequest);
   const basis = suggestionRequest.messages.length > 0 ? "chat" : "stream_context";
   console.info("[suggestion:analysis] completed", {
     basis,
@@ -215,25 +219,6 @@ async function analyzeWindow(
      WHERE connection_id = $1 AND window_start = $2 AND window_end = $3`,
     [connectionId, windowStart, windowEnd, statement, basis],
   );
-}
-
-async function requestSuggestion(
-  connectionId: string,
-  input: SuggestionGenerationRequest,
-): Promise<string> {
-  const response = await fetch(`${appUrl()}/api/internal/suggestions/generate`, {
-    body: JSON.stringify(input),
-    headers: {
-      authorization: `Bearer ${signInternalJwt(connectionId)}`,
-      "content-type": "application/json",
-    },
-    method: "POST",
-    redirect: "error",
-  });
-  if (!response.ok) {
-    throw new Error(`Suggestion endpoint returned HTTP ${response.status}.`);
-  }
-  return suggestionGenerationResponseSchema.parse(await response.json()).statement;
 }
 
 async function markWindowFailed(

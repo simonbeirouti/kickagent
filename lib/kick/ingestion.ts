@@ -28,6 +28,7 @@ export async function ingestChat(
       SELECT id
       FROM kick_connections
       WHERE kick_user_id = $3 AND active = true
+      FOR UPDATE
     ), accepted AS (
       INSERT INTO kick_webhook_events (event_message_id, event_type)
       SELECT $1, $2 FROM connection
@@ -41,9 +42,10 @@ export async function ingestChat(
     ), inserted_chat AS (
       INSERT INTO chat_messages (
         message_id, event_message_id, connection_id, sender_user_id, sender_username,
-        sender_profile_picture, content, reply_to_message_id, created_at, window_start
+        sender_profile_picture, content, reply_to_message_id, created_at, window_start,
+        ingested_at
       )
-      SELECT $4, $1, matched.id, $5, $6, $7, $8, $9, $10, $11
+      SELECT $4, $1, matched.id, $5, $6, $7, $8, $9, $10, $11, clock_timestamp()
       FROM matched
       ON CONFLICT DO NOTHING
       RETURNING
@@ -130,6 +132,6 @@ export async function ingestChat(
     connectionId: result.connection_id,
     inserted: true,
     messageCount,
-    shouldGenerateSuggestion: messageCount === 5,
+    shouldGenerateSuggestion: messageCount >= 5,
   };
 }

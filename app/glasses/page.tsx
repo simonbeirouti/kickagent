@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { GlassesSurface } from "@/app/_components/companion-surfaces";
+import { KickOverlay } from "@/app/_components/kick-overlay";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function GlassesPage() {
-  return <GlassesSurface />;
+  return <KickOverlay liveScreen="glasses" />;
 }

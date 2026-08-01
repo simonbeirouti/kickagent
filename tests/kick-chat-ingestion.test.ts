@@ -32,6 +32,8 @@ describe("Kick chat ingestion", () => {
     const outcome = await ingestChat("event-1", "chat.message.sent", chatEvent);
 
     expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0]?.[0]).toContain("FOR UPDATE");
+    expect(query.mock.calls[0]?.[0]).toContain("clock_timestamp()");
     expect(query.mock.calls[1]?.[0]).toContain("OFFSET 5");
     expect(outcome).toMatchObject({ inserted: true, messageCount: 1, shouldGenerateSuggestion: false });
   });
@@ -49,6 +51,23 @@ describe("Kick chat ingestion", () => {
     await expect(ingestChat("event-5", "chat.message.sent", chatEvent)).resolves.toMatchObject({
       inserted: true,
       messageCount: 5,
+      shouldGenerateSuggestion: true,
+    });
+  });
+
+  it("keeps requesting generation above five until a workflow claims the count", async () => {
+    query.mockResolvedValueOnce([
+      {
+        connection_id: "00000000-0000-0000-0000-000000000001",
+        connection_matched: true,
+        message_inserted: true,
+        suggestion_message_count: 6,
+      },
+    ]).mockResolvedValueOnce([]);
+
+    await expect(ingestChat("event-6", "chat.message.sent", chatEvent)).resolves.toMatchObject({
+      inserted: true,
+      messageCount: 6,
       shouldGenerateSuggestion: true,
     });
   });
