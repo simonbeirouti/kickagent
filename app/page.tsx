@@ -1,5 +1,5 @@
-import { AgentChat } from "@/app/_components/agent-chat";
+import { KickOverlay } from "@/app/_components/kick-overlay";
 
 export default function Page() {
-  return <AgentChat />;
+  return <KickOverlay />;
 }
