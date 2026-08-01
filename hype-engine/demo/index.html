@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kick-Ass(istant) — Hype Engine Demo</title>
+<style>
+  :root {
+    --green: #53fc18; --bg: #0b0e0c; --panel: #12170f;
+    --border: #223026; --text: #f2f5f0; --muted: #8fa08f;
+    --amber: #ffb020; --red: #ff4d4d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.7rem 1.2rem; border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 1rem; letter-spacing: 0.15em; }
+  header h1 span { color: var(--green); }
+  header .clock { color: var(--muted); font-variant-numeric: tabular-nums; }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.45rem 0.9rem; font-size: 0.85rem; cursor: pointer;
+  }
+  button:hover { border-color: var(--green); }
+  button.primary { background: var(--green); color: #08210a; font-weight: 700; border-color: var(--green); }
+
+  main { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 1rem; padding: 1rem; min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+  .card h2 { font-size: 0.75rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--green); margin-bottom: 0.8rem; }
+
+  /* Hype meter */
+  #hypeNum { font-size: 4.6rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  #hypeNum small { font-size: 1.4rem; color: var(--muted); font-weight: 600; }
+  #trend { font-size: 1rem; margin-left: 0.6rem; }
+  .meter { height: 22px; background: #0a0f09; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; margin-top: 0.9rem; }
+  .meter > div { height: 100%; width: 0%; background: linear-gradient(90deg, #1f7a12, var(--green)); border-radius: 11px; transition: none; }
+  .meta { display: flex; gap: 1.4rem; margin-top: 0.7rem; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  #readyBadge {
+    display: inline-block; margin-top: 0.8rem; padding: 0.3rem 0.7rem; border-radius: 7px;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
+    background: rgba(255,176,32,.12); color: var(--amber); border: 1px solid var(--amber);
+  }
+  #readyBadge.open { background: rgba(83,252,24,.1); color: var(--green); border-color: var(--green); }
+
+  /* Topics */
+  .topic { display: grid; grid-template-columns: 1.4rem 7.5rem 1fr 2.2rem; align-items: center; gap: 0.6rem; margin: 0.5rem 0; font-size: 0.9rem; }
+  .topic .bar { height: 8px; background: #0a0f09; border-radius: 4px; overflow: hidden; }
+  .topic .bar > div { height: 100%; background: var(--green); border-radius: 4px; }
+  .topic .t-rising { color: var(--green); }
+  .topic .t-falling { color: var(--red); }
+  .topic .t-steady { color: var(--muted); }
+
+  /* Feeds */
+  .feed { flex: 1; overflow-y: auto; min-height: 0; }
+  .msg { font-size: 0.85rem; padding: 0.22rem 0; color: var(--muted); }
+  .msg b { color: var(--text); font-weight: 600; }
+  .msg.kicks b, .msg.kicks { color: var(--amber); }
+  .msg.sub b, .msg.sub { color: var(--green); }
+  .msg.spam { color: var(--red); text-decoration: line-through; opacity: 0.6; }
+
+  .toast { border: 1px solid var(--green); background: rgba(83,252,24,.07); border-radius: 10px; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; font-size: 0.9rem; }
+  .toast .when { color: var(--muted); font-size: 0.72rem; margin-top: 0.25rem; }
+  .toast.flag { border-color: var(--red); background: rgba(255,77,77,.07); }
+  .toast.impact-up { border-color: var(--green); }
+  .toast.impact-flat { border-color: var(--amber); background: rgba(255,176,32,.07); }
+  .toast.impact-down { border-color: var(--red); background: rgba(255,77,77,.07); }
+
+  #chatCard, #assistCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>KICK-ASS<span>(ISTANT)</span> · HYPE ENGINE</h1>
+  <span class="clock" id="clock">0:00</span>
+  <div class="spacer"></div>
+  <button id="playBtn" class="primary">Pause</button>
+  <button id="speedBtn">Speed 1×</button>
+  <button id="restartBtn">Restart</button>
+  <button id="burstBtn">Inject hype burst</button>
+  <button id="spamBtn">Inject spammer</button>
+  <button id="dareBtn">Hit Me, Kick Me</button>
+</header>
+
+<main>
+  <div class="col">
+    <div class="card">
+      <h2>Hype Score · streamer-only</h2>
+      <div><span id="hypeNum">0<small>/100</small></span><span id="trend"></span></div>
+      <div class="meter"><div id="meterFill"></div></div>
+      <div class="meta">
+        <span>raw <b id="rawV">0</b></span>
+        <span>baseline <b id="baseV">0</b></span>
+        <span>z <b id="zV">0</b></span>
+      </div>
+      <div id="readyBadge">CALIBRATING BASELINE…</div>
+    </div>
+    <div class="card" style="flex:1; min-height:0;">
+      <h2>Hot Topics · what chat cares about</h2>
+      <div id="topics"></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" id="chatCard">
+      <h2>Chat · mock replay (mirrors KICK webhook payloads)</h2>
+      <div class="feed" id="chat"></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" id="assistCard">
+      <h2>Assistant · suggestions, flags &amp; Hit Me, Kick Me impact</h2>
+      <div class="feed" id="assist"></div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { HypeEngine } from '../src/engine.js';
+import { TopicTracker } from '../src/topics.js';
+import { KickAssistant } from '../src/assistant.js';
+import { createScriptedReplay } from '../src/mock.js';
+
+const $ = (id) => document.getElementById(id);
+const fmtClock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+
+let engine, topics, assistant, events, ei, simNow, playing = true, speed = 1;
+let displayHype = 0, targetState = null, lastSampleAt = 0;
+
+function toast(cls, html, when) {
+  const el = document.createElement('div');
+  el.className = `toast ${cls}`;
+  el.innerHTML = `${html}<div class="when">at ${fmtClock(when)}</div>`;
+  $('assist').prepend(el);
+}
+
+function boot() {
+  engine = new HypeEngine();
+  topics = new TopicTracker();
+  assistant = new KickAssistant(engine, topics);
+  events = createScriptedReplay();
+  ei = 0; simNow = 0; displayHype = 0; targetState = null; lastSampleAt = -1000;
+  $('chat').innerHTML = ''; $('assist').innerHTML = '';
+  $('readyBadge').className = ''; $('readyBadge').textContent = 'CALIBRATING BASELINE…';
+
+  assistant.on('ready', (p) => {
+    $('readyBadge').className = 'open';
+    $('readyBadge').textContent = 'BASELINE LOCKED — HIT ME, KICK ME OPEN';
+    toast('', `<b>Baseline locked.</b> "Hit Me, Kick Me" can open.`, p.ts);
+  });
+  assistant.on('suggestion', (p) => toast('', `<b>Suggestion:</b> ${p.text}`, p.ts));
+  assistant.on('impact', (p) => {
+    const label = { up: 'HYPE UP', flat: 'FLAT', down: 'HYPE DOWN' }[p.verdict];
+    toast(`impact-${p.verdict}`, `<b>Hit Me, Kick Me result — ${label}</b> · "${p.label}" moved hype ${p.preHype}→${p.postHype} (Δ${p.delta >= 0 ? '+' : ''}${p.delta})`, p.ts);
+  });
+}
+
+function renderChatLine(ev, flagged) {
+  const el = document.createElement('div');
+  const text = (ev.text || '').replace(/\[emote:\d+:([^\]]+)\]/g, ':$1:');
+  if (ev.type === 'kicks') { el.className = 'msg kicks'; el.innerHTML = `<b>${ev.username}</b> gifted ${ev.raw} Kicks`; }
+  else if (ev.type === 'sub') { el.className = 'msg sub'; el.innerHTML = `<b>${ev.username}</b> subscribed`; }
+  else { el.className = flagged ? 'msg spam' : 'msg'; el.innerHTML = `<b>${ev.username}</b> ${text}`; }
+  const feed = $('chat');
+  feed.appendChild(el);
+  while (feed.children.length > 120) feed.firstChild.remove();
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function step(dtMs) {
+  simNow += dtMs;
+  while (ei < events.length && events[ei].ts <= simNow) {
+    const ev = events[ei++];
+    const w = engine.ingest(ev);
+    const flagged = engine.isFlagged(ev.userId);
+    if (!flagged) topics.ingest(ev, w);
+    if (flagged && ev.userId !== lastFlagToasted) {
+      lastFlagToasted = ev.userId;
+      toast('flag', `<b>Spam shield:</b> flagged <b>${ev.username}</b> — excluded from hype &amp; topics`, ev.ts);
+    }
+    renderChatLine(ev, flagged);
+  }
+  if (simNow - lastSampleAt >= 250) {
+    lastSampleAt = simNow;
+    targetState = engine.sample(simNow);
+    assistant.onSample(targetState, simNow);
+    renderTopics();
+  }
+}
+let lastFlagToasted = null;
+
+function renderTopics() {
+  const rows = topics.top(6, simNow);
+  const max = rows[0]?.score || 1;
+  const arrows = { rising: '▲', steady: '▶', falling: '▼' };
+  $('topics').innerHTML = rows.map((t, i) => `
+    <div class="topic">
+      <span style="color:var(--muted)">${i + 1}</span>
+      <b>${t.topic}</b>
+      <div class="bar"><div style="width:${Math.round((t.score / max) * 100)}%"></div></div>
+      <span class="t-${t.trend}">${arrows[t.trend]}</span>
+    </div>`).join('');
+}
+
+function render() {
+  if (targetState) {
+    // Interpolate the meter toward the target — smooth reads as "live".
+    displayHype += (targetState.hype - displayHype) * 0.08;
+    const h = Math.round(displayHype);
+    $('hypeNum').innerHTML = `${h}<small>/100</small>`;
+    $('meterFill').style.width = `${h}%`;
+    $('meterFill').style.background = h > 66
+      ? 'linear-gradient(90deg,#1f7a12,var(--green))'
+      : h > 33 ? 'linear-gradient(90deg,#7a6a12,var(--amber))'
+      : 'linear-gradient(90deg,#5a1f1f,#c05050)';
+    $('trend').textContent = { rising: '▲ rising', steady: '▶ steady', falling: '▼ falling' }[targetState.trend];
+    $('trend').style.color = targetState.trend === 'rising' ? 'var(--green)' : targetState.trend === 'falling' ? 'var(--red)' : 'var(--muted)';
+    $('rawV').textContent = targetState.raw.toFixed(1);
+    $('baseV').textContent = targetState.baseline.toFixed(1);
+    $('zV').textContent = targetState.z.toFixed(2);
+  }
+  $('clock').textContent = fmtClock(simNow);
+}
+
+// ---- injected events (interactivity for judges) ----
+let injectId = 1;
+function injectBurst() {
+  const lines = ['LETS GOOO', 'NO WAY', 'CLIP IT', 'W W W', 'HE DID IT', 'INSANE [emote:1730752:KEKW]'];
+  const add = [];
+  for (let i = 0; i < 40; i++) {
+    const username = `viewer_${Math.floor(Math.random() * 300)}`;
+    add.push({ id: `inj${injectId++}`, type: 'chat', userId: username, username, badges: [],
+      text: lines[Math.floor(Math.random() * lines.length)], ts: simNow + 100 + Math.random() * 5000 });
+  }
+  spliceEvents(add);
+}
+function injectSpammer() {
+  const add = [];
+  for (let i = 0; i < 30; i++) {
+    add.push({ id: `inj${injectId++}`, type: 'chat', userId: 'spam_bot_777', username: 'spam_bot_777', badges: [],
+      text: 'BUY CHEAP FOLLOWERS NOW', ts: simNow + 100 + i * 200 });
+  }
+  spliceEvents(add);
+}
+function spliceEvents(add) {
+  events = events.concat(add).sort((a, b) => a.ts - b.ts);
+  ei = events.findIndex((e) => e.ts > simNow);
+  if (ei < 0) ei = events.length;
+}
+
+$('playBtn').onclick = () => { playing = !playing; $('playBtn').textContent = playing ? 'Pause' : 'Play'; };
+$('speedBtn').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; $('speedBtn').textContent = `Speed ${speed}×`; };
+$('restartBtn').onclick = () => boot();
+$('burstBtn').onclick = () => injectBurst();
+$('spamBtn').onclick = () => injectSpammer();
+$('dareBtn').onclick = () => {
+  assistant.trackAction('viewer dare', simNow);
+  toast('', `<b>Hit Me, Kick Me started</b> — measuring hype impact for 15s…`, simNow);
+  setTimeout(() => injectBurst(), 1500 / speed); // mocked chat reaction to the dare
+};
+
+boot();
+let lastFrame = performance.now();
+(function loop(t) {
+  const dt = Math.min(100, t - lastFrame);
+  lastFrame = t;
+  if (playing) step(dt * speed);
+  render();
+  requestAnimationFrame(loop);
+})(performance.now());
+</script>
+</body>
+</html>
