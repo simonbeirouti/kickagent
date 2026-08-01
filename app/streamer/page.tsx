@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { StreamerPhoneSurface } from "@/app/_components/companion-surfaces";
+import { createDemoOverlayState } from "@/lib/overlay-state";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function StreamerPhonePage() {
-  return <StreamerPhoneSurface />;
+  return <StreamerPhoneSurface initialState={createDemoOverlayState()} />;
 }

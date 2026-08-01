@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { KickOverlay } from "@/app/_components/kick-overlay";
+import { createDemoOverlayState } from "@/lib/overlay-state";
 
 export const metadata: Metadata = {
   referrer: "no-referrer",
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function PublicOverlayPage() {
-  return <KickOverlay publicMode />;
+  return <KickOverlay initialState={createDemoOverlayState()} publicMode />;
 }
