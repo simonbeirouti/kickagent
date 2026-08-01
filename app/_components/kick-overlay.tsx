@@ -2,9 +2,8 @@
 
 import {
   ActivityIcon,
-  CheckIcon,
   Clock3Icon,
-  CopyIcon,
+  ExternalLinkIcon,
   GripVerticalIcon,
   LogOutIcon,
   MessageCircleIcon,
@@ -19,39 +18,12 @@ import {
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
   WIDGET_DEFAULTS,
+  parseOverlayLayout,
   type OverlayLayout,
   type WidgetKind,
   type WidgetPlacement,
 } from "@/lib/overlay-layout";
-
-interface OverlayState {
-  readonly authenticated: true;
-  readonly channel: {
-    readonly category: string | null;
-    readonly displayName: string;
-    readonly profilePicture: string | null;
-    readonly slug: string;
-    readonly streamTitle: string | null;
-  };
-  readonly connected: boolean;
-  readonly hypeScore: number;
-  readonly ingestionEnabled: boolean;
-  readonly layout: OverlayLayout;
-  readonly live: boolean;
-  readonly messages: readonly {
-    readonly content: string;
-    readonly createdAt: string;
-    readonly id: string;
-    readonly username: string;
-  }[];
-  readonly suggestion: {
-    readonly basis: "chat" | "stream_context" | null;
-    readonly generatedAt: string;
-    readonly stale: boolean;
-    readonly text: string;
-  } | null;
-  readonly updatedAt: string;
-}
+import type { OverlayState } from "@/lib/overlay-state";
 
 interface DragPayload {
   readonly id?: string;
@@ -68,9 +40,11 @@ const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
 
 export function KickOverlay({
   accessToken,
+  demoMode = false,
   publicMode = false,
 }: {
   readonly accessToken?: string;
+  readonly demoMode?: boolean;
   readonly publicMode?: boolean;
 }) {
   const [state, setState] = useState<OverlayState>();
@@ -78,8 +52,6 @@ export function KickOverlay({
   const [authenticated, setAuthenticated] = useState<boolean>();
   const [error, setError] = useState<string>();
   const [disconnecting, setDisconnecting] = useState(false);
-  const [copying, setCopying] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
   const refresh = useCallback(
@@ -87,7 +59,9 @@ export function KickOverlay({
       try {
         const search = new URLSearchParams();
         if (accessToken) search.set("token", accessToken);
-        if (syncKick) search.set("sync", "kick");
+        else if (publicMode) search.set("public", "overlay");
+        if (demoMode) search.set("demo", "1");
+        if (syncKick && !demoMode) search.set("sync", "kick");
         const response = await fetch(`/api/overlay/state?${search}`, { cache: "no-store" });
         if (response.status === 401) {
           setAuthenticated(false);
@@ -104,7 +78,7 @@ export function KickOverlay({
         setError(cause instanceof Error ? cause.message : "Overlay update failed.");
       }
     },
-    [accessToken, publicMode],
+    [accessToken, demoMode, publicMode],
   );
 
   useEffect(() => {
@@ -122,6 +96,12 @@ export function KickOverlay({
   const saveLayout = async (layout: OverlayLayout) => {
     setDraftLayout(layout);
     setSaveState("saving");
+    if (demoMode) {
+      window.localStorage.setItem("kickagent-demo-layout", JSON.stringify(layout));
+      setSaveState("saved");
+      window.setTimeout(() => setSaveState("idle"), 1_500);
+      return;
+    }
     try {
       const response = await fetch("/api/overlay/layout", {
         body: JSON.stringify(layout),
@@ -134,27 +114,6 @@ export function KickOverlay({
     } catch (cause) {
       setSaveState("idle");
       setError(cause instanceof Error ? cause.message : "Could not save the overlay layout.");
-    }
-  };
-
-  const copyObsUrl = async () => {
-    setCopying(true);
-    try {
-      const response = await fetch("/api/overlay/access", {
-        body: JSON.stringify({ layout: draftLayout }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("Could not create the OBS URL.");
-      const result = (await response.json()) as { readonly url: string };
-      await navigator.clipboard.writeText(result.url);
-      setCopied(true);
-      setError(undefined);
-      window.setTimeout(() => setCopied(false), 2_000);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not create the OBS URL.");
-    } finally {
-      setCopying(false);
     }
   };
 
@@ -180,12 +139,16 @@ export function KickOverlay({
   if (publicMode) {
     return (
       <main className="public-overlay-shell">
-        <OverlayCanvas layout={state.layout} publicMode state={state} />
+        <OverlayCanvas
+          layout={demoMode ? readDemoLayout(state.layout) : state.layout}
+          publicMode
+          state={state}
+        />
       </main>
     );
   }
 
-  const layout = draftLayout ?? state.layout;
+  const layout = draftLayout ?? (demoMode ? readDemoLayout(state.layout) : state.layout);
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
@@ -202,26 +165,26 @@ export function KickOverlay({
         </div>
         <div className="header-actions">
           <StatusPill live={state.live} />
-          <button
-            className="obs-link-button"
-            disabled={copying}
-            onClick={() => void copyObsUrl()}
-            type="button"
-          >
-            {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
-            {copied ? "Copied" : copying ? "Creating…" : "Copy OBS URL"}
-          </button>
-          <button
-            aria-label="Disconnect Kick"
-            className="icon-button"
-            disabled={disconnecting}
-            onClick={() => void disconnect()}
-            type="button"
-          >
-            <LogOutIcon size={17} />
-          </button>
+          {demoMode ? <span className="demo-pill">No auth · Demo data</span> : null}
+          {!demoMode ? (
+            <button
+              aria-label="Disconnect Kick"
+              className="icon-button"
+              disabled={disconnecting}
+              onClick={() => void disconnect()}
+              type="button"
+            >
+              <LogOutIcon size={17} />
+            </button>
+          ) : null}
         </div>
       </header>
+
+      <nav aria-label="Demo surfaces" className="surface-launcher">
+        <SurfaceLink description="Private cues in your eyeline" href="/glasses" label="Glasses" />
+        <SurfaceLink description="The full streamer brief" href="/streamer" label="Streamer phone" />
+        <SurfaceLink description="What the audience sees" href="/public/overlay" label="Public overlay" />
+      </nav>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
@@ -415,6 +378,26 @@ function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
   return <SparklesIcon size={17} />;
 }
 
+function SurfaceLink({
+  description,
+  href,
+  label,
+}: {
+  readonly description: string;
+  readonly href: string;
+  readonly label: string;
+}) {
+  return (
+    <a className="surface-link" href={href} rel="noreferrer" target="_blank">
+      <span>
+        <strong>{label}</strong>
+        <small>{description}</small>
+      </span>
+      <ExternalLinkIcon aria-hidden size={15} />
+    </a>
+  );
+}
+
 function StatusPill({ live }: { readonly live: boolean }) {
   return <span className={live ? "status-pill live" : "status-pill offline"}><span className="status-dot" />{live ? "Live" : "Offline"}</span>;
 }
@@ -464,6 +447,16 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
+function readDemoLayout(fallback: OverlayLayout): OverlayLayout {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = window.localStorage.getItem("kickagent-demo-layout");
+    return saved ? parseOverlayLayout(JSON.parse(saved)) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function suggestionText(state: OverlayState): string {
   if (state.suggestion?.text) return state.suggestion.text;
   if (!state.live) return "Go live when you're ready — your next talking point will appear here.";
@@ -477,7 +470,7 @@ function ConnectScreen({ error }: { readonly error?: string }) {
 }
 
 function InvalidOverlayScreen() {
-  return <main className="connect-screen"><div className="connect-card invalid-overlay-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Overlay link unavailable.</h1><p className="connect-copy">Copy a fresh OBS URL from the connected companion dashboard.</p></div></main>;
+  return <main className="connect-screen"><div className="connect-card invalid-overlay-card"><div className="kick-mark">K</div><p className="eyebrow">Kick streamer companion</p><h1>Overlay unavailable.</h1><p className="connect-copy">Connect Kick to publish widgets here.</p></div></main>;
 }
 
 function LoadingScreen() {

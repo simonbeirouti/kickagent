@@ -1,7 +1,12 @@
 import { query } from "@/lib/db";
 import { getKickChannel } from "@/lib/kick/oauth";
-import { findConnectionById, refreshKickChannelIfStale } from "@/lib/kick/repository";
+import {
+  findConnectionById,
+  findOwnerConnection,
+  refreshKickChannelIfStale,
+} from "@/lib/kick/repository";
 import { DEFAULT_OVERLAY_LAYOUT, parseOverlayLayout } from "@/lib/overlay-layout";
+import { createDemoOverlayState } from "@/lib/overlay-state";
 import {
   connectionIdFromRequest,
   overlayAccessFromRequest,
@@ -29,9 +34,17 @@ interface AnalysisRow extends Record<string, unknown> {
 
 export async function GET(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
+  const demo = requestUrl.searchParams.get("demo") === "1";
+  const publicOverlay = requestUrl.searchParams.get("public") === "overlay";
   const syncKick = requestUrl.searchParams.get("sync") === "kick";
+  if (demo) {
+    return Response.json(createDemoOverlayState(), { headers: noStoreHeaders() });
+  }
   const overlayAccess = overlayAccessFromRequest(request);
-  if (statelessKickMode()) {
+  // The public overlay is backed by the persisted owner connection and must not
+  // depend on the viewer's session cookie, even when stateless dashboard mode is
+  // enabled for local sign-in/previewing.
+  if (statelessKickMode() && !publicOverlay) {
     const session =
       overlayAccess?.kind === "stateless"
         ? overlayAccess.session
@@ -70,14 +83,16 @@ export async function GET(request: Request): Promise<Response> {
       { headers: noStoreHeaders() },
     );
   }
-  const connectionId =
-    overlayAccess?.kind === "connection"
+  const publicConnection = publicOverlay ? await findOwnerConnection() : undefined;
+  const connectionId = publicConnection
+    ? publicConnection.id
+    : overlayAccess?.kind === "connection"
       ? overlayAccess.connectionId
       : await connectionIdFromRequest(request);
   if (!connectionId) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
   }
-  let connection = await findConnectionById(connectionId);
+  let connection = publicConnection ?? (await findConnectionById(connectionId));
   if (!connection || !connection.active) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
   }

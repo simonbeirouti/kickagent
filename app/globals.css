@@ -95,6 +95,693 @@ body {
   font-family: var(--font-sans);
 }
 
+body:has(.public-overlay-shell),
+body:has(.glasses-surface) {
+  background: transparent;
+}
+
+.surface-launcher {
+  display: grid;
+  width: min(1500px, 100%);
+  margin: 0 auto 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.surface-link {
+  display: flex;
+  min-width: 0;
+  min-height: 4.5rem;
+  padding: 0.8rem 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.9rem;
+  background: rgb(21 24 22 / 78%);
+  color: #dce2dd;
+  text-decoration: none;
+  transition: 160ms ease;
+}
+
+.surface-link:hover {
+  border-color: rgb(83 252 24 / 30%);
+  background: rgb(83 252 24 / 7%);
+  transform: translateY(-1px);
+}
+
+.surface-link > span {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.surface-link strong {
+  font-size: 0.8rem;
+}
+
+.surface-link small {
+  overflow: hidden;
+  color: #747c76;
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.surface-link svg {
+  flex: 0 0 auto;
+  color: #53fc18;
+}
+
+.demo-pill {
+  padding: 0.5rem 0.72rem;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  color: #7d857f;
+  font-size: 0.68rem;
+}
+
+/* Glasses is deliberately sparse: glanceable cues sit at the edge of vision. */
+.glasses-surface {
+  position: relative;
+  overflow: hidden;
+  width: 100vw;
+  min-height: 100dvh;
+  background:
+    linear-gradient(180deg, rgb(2 6 4 / 45%), rgb(2 6 4 / 20%) 44%, rgb(2 6 4 / 68%)),
+    radial-gradient(circle at 50% 45%, rgb(83 252 24 / 4%), transparent 25rem),
+    #060908;
+  color: #f4f8f5;
+}
+
+.glasses-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 35%, rgb(0 0 0 / 60%) 110%);
+  pointer-events: none;
+}
+
+.glasses-topbar {
+  position: absolute;
+  z-index: 2;
+  top: clamp(1.25rem, 4vw, 3rem);
+  right: clamp(1.25rem, 4vw, 3rem);
+  left: clamp(1.25rem, 4vw, 3rem);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  color: rgb(220 230 222 / 72%);
+  font-size: 0.72rem;
+}
+
+.surface-back,
+.phone-stage-back {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.glasses-mode {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.glasses-live {
+  justify-self: end;
+}
+
+.glasses-live i,
+.glasses-listening i,
+.phone-live i,
+.phone-footer i {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.38rem;
+  border-radius: 50%;
+  background: #53fc18;
+  box-shadow: 0 0 0.7rem rgb(83 252 24 / 72%);
+}
+
+.glasses-private-card,
+.glasses-cue-card {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid rgb(255 255 255 / 12%);
+  background: rgb(10 15 12 / 72%);
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 32%);
+  backdrop-filter: blur(18px);
+}
+
+.glasses-private-card {
+  top: 18%;
+  right: clamp(1.25rem, 6vw, 6rem);
+  width: min(22rem, 38vw);
+  padding: 1rem 1.1rem 1.05rem;
+  border-radius: 1rem;
+}
+
+.glasses-card-label,
+.glasses-cue-meta,
+.glasses-cue-card footer,
+.glasses-bottom-status {
+  display: flex;
+  align-items: center;
+}
+
+.glasses-card-label {
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  color: #ffca86;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.glasses-private-card strong {
+  display: block;
+  font-size: clamp(0.88rem, 1.3vw, 1.05rem);
+  line-height: 1.35;
+}
+
+.glasses-private-card p {
+  margin: 0.45rem 0 0;
+  color: #89928b;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.glasses-cue-card {
+  bottom: clamp(4rem, 10vh, 7rem);
+  left: clamp(1.25rem, 6vw, 6rem);
+  width: min(42rem, 58vw);
+  padding: clamp(1.1rem, 2.4vw, 1.8rem);
+  border-color: rgb(83 252 24 / 22%);
+  border-radius: 1.25rem;
+}
+
+.glasses-cue-meta {
+  justify-content: space-between;
+  color: #91ff6c;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.glasses-cue-meta > span:first-child {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.glasses-listening {
+  color: #7e8780;
+  font-size: 0.6rem;
+}
+
+.glasses-cue-card > p {
+  max-width: 28ch;
+  margin: 1rem 0 1.3rem;
+  font-size: clamp(1.25rem, 2.7vw, 2.35rem);
+  font-weight: 560;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.glasses-cue-card footer {
+  justify-content: space-between;
+  color: #707a72;
+  font-size: 0.66rem;
+}
+
+.glasses-cue-card button {
+  display: flex;
+  padding: 0.45rem 0.55rem 0.45rem 0.7rem;
+  gap: 0.3rem;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 5%);
+  color: #c9d1cb;
+  cursor: pointer;
+  font-size: 0.66rem;
+}
+
+.glasses-reticle {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.glasses-reticle span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.18rem;
+  height: 0.18rem;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 28%);
+  transform: translate(-50%, -50%);
+}
+
+.glasses-bottom-status {
+  position: absolute;
+  z-index: 2;
+  right: clamp(1.25rem, 4vw, 3rem);
+  bottom: clamp(1.25rem, 4vw, 2.25rem);
+  gap: 1rem;
+  color: rgb(187 198 189 / 46%);
+  font-size: 0.62rem;
+}
+
+.glasses-bottom-status span {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+/* Phone preview */
+.phone-demo-stage {
+  position: relative;
+  display: grid;
+  min-height: 100dvh;
+  padding: 4rem 1.25rem 2rem;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 10%, rgb(83 252 24 / 12%), transparent 28rem),
+    #090c0a;
+}
+
+.phone-stage-back {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  color: #7d867f;
+  font-size: 0.72rem;
+}
+
+.phone-device {
+  position: relative;
+  width: min(25rem, calc(100vw - 2rem));
+  height: min(50rem, calc(100dvh - 6.5rem));
+  min-height: 38rem;
+  padding: 0.55rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 2.65rem;
+  background: #020403;
+  box-shadow: 0 2.5rem 8rem rgb(0 0 0 / 65%), 0 0 0 0.35rem #181c19;
+}
+
+.phone-island {
+  position: absolute;
+  z-index: 3;
+  top: 0.95rem;
+  left: 50%;
+  width: 5.6rem;
+  height: 1.55rem;
+  border-radius: 999px;
+  background: #020403;
+  transform: translateX(-50%);
+}
+
+.phone-screen {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+  border-radius: 2.15rem;
+  background: #0d110e;
+}
+
+.phone-header {
+  display: flex;
+  padding: 2.9rem 1.15rem 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phone-channel {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.phone-avatar {
+  display: grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: #53fc18;
+  color: #071006;
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.phone-channel > span:last-child {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.phone-channel small,
+.phone-card-heading small {
+  color: #667068;
+  font-size: 0.59rem;
+}
+
+.phone-channel strong {
+  font-size: 0.82rem;
+}
+
+.phone-live {
+  padding: 0.42rem 0.58rem;
+  border: 1px solid rgb(83 252 24 / 18%);
+  border-radius: 999px;
+  background: rgb(83 252 24 / 7%);
+  color: #a2ff82;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.phone-pulse-card {
+  position: relative;
+  display: grid;
+  min-height: 7rem;
+  margin: 0 0.9rem;
+  padding: 0.95rem;
+  grid-template-columns: 5.3rem 1fr;
+  gap: 0.7rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 1.15rem;
+  background: linear-gradient(135deg, rgb(83 252 24 / 10%), rgb(255 255 255 / 2%));
+}
+
+.phone-pulse-card > div:first-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.phone-section-label {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  color: #7b857d;
+  font-size: 0.59rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.phone-pulse-card strong {
+  margin-top: auto;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.phone-pulse-card small {
+  margin-top: 0.2rem;
+  color: #9aa39c;
+  font-size: 0.58rem;
+}
+
+.phone-pulse-bars {
+  display: flex;
+  height: 3.8rem;
+  margin-top: 1.15rem;
+  gap: 0.22rem;
+  align-items: end;
+}
+
+.phone-pulse-bars i {
+  width: 100%;
+  min-width: 0.15rem;
+  border-radius: 999px;
+  background: linear-gradient(#53fc18, rgb(83 252 24 / 16%));
+}
+
+.phone-viewers {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  color: #929b94;
+  font-size: 0.6rem;
+}
+
+.phone-tabs {
+  display: grid;
+  margin: 0.85rem 0.9rem 0;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+}
+
+.phone-tabs button {
+  position: relative;
+  padding: 0.55rem 0.25rem 0.65rem;
+  border: 0;
+  background: transparent;
+  color: #687169;
+  cursor: pointer;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.phone-tabs button.active {
+  color: #e8ece9;
+}
+
+.phone-tabs button.active::after {
+  position: absolute;
+  right: 22%;
+  bottom: -1px;
+  left: 22%;
+  height: 2px;
+  border-radius: 999px;
+  background: #53fc18;
+  content: "";
+}
+
+.phone-tabs button span {
+  margin-left: 0.3rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 999px;
+  background: rgb(83 252 24 / 10%);
+  color: #80e85b;
+  font-size: 0.52rem;
+}
+
+.phone-panel {
+  min-height: 0;
+  padding: 0.8rem 0.9rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.phone-suggestion-card,
+.phone-topic-card,
+.phone-chat-card,
+.phone-notes-card {
+  padding: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 1rem;
+  background: #141915;
+}
+
+.phone-suggestion-card {
+  border-color: rgb(83 252 24 / 16%);
+  background: linear-gradient(145deg, rgb(83 252 24 / 8%), #141915 55%);
+}
+
+.phone-card-heading,
+.phone-topic-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phone-card-heading > span {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  color: #8aff65;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.phone-suggestion-card p {
+  margin: 0.85rem 0 1rem;
+  font-size: 1.12rem;
+  font-weight: 570;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+}
+
+.phone-suggestion-card button {
+  display: flex;
+  padding: 0;
+  gap: 0.35rem;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: #778078;
+  cursor: pointer;
+  font-size: 0.59rem;
+}
+
+.phone-suggestion-card button.used {
+  color: #8dff67;
+}
+
+.phone-topic-card {
+  margin-top: 0.65rem;
+}
+
+.phone-topic-row {
+  margin-top: 0.8rem;
+  font-size: 0.68rem;
+}
+
+.phone-topic-row span {
+  color: #8e9790;
+  font-size: 0.6rem;
+}
+
+.phone-topic-row.secondary {
+  margin-top: 0.65rem;
+  color: #848d86;
+}
+
+.phone-topic-meter {
+  height: 0.28rem;
+  margin-top: 0.42rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.phone-topic-meter i {
+  display: block;
+  width: 68%;
+  height: 100%;
+  border-radius: inherit;
+  background: #53fc18;
+}
+
+.phone-message {
+  display: grid;
+  padding: 0.8rem 0;
+  grid-template-columns: 2rem 1fr;
+  gap: 0.65rem;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.phone-message:last-child {
+  border-bottom: 0;
+}
+
+.phone-message > span {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: rgb(83 252 24 / 9%);
+  color: #8dff66;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.phone-message p {
+  display: grid;
+  margin: 0;
+  gap: 0.25rem;
+  color: #929b94;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.phone-message strong {
+  color: #dce1dd;
+  font-size: 0.64rem;
+}
+
+.phone-notes-card h2 {
+  margin: 1rem 0;
+  color: #ffd197;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.phone-notes-card ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 0.6rem;
+  list-style: none;
+}
+
+.phone-notes-card li {
+  padding: 0.7rem;
+  border-radius: 0.7rem;
+  background: rgb(255 255 255 / 3%);
+  color: #9ba39d;
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+.phone-footer {
+  display: flex;
+  min-height: 2.75rem;
+  padding: 0 1.15rem 0.25rem;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgb(255 255 255 / 5%);
+  color: #515a53;
+  font-size: 0.56rem;
+}
+
+@media (max-width: 760px) {
+  .surface-launcher {
+    grid-template-columns: 1fr;
+  }
+
+  .glasses-private-card {
+    top: 16%;
+    right: 1rem;
+    width: min(19rem, calc(100vw - 2rem));
+  }
+
+  .glasses-cue-card {
+    bottom: 5rem;
+    left: 1rem;
+    width: calc(100vw - 2rem);
+  }
+
+  .glasses-bottom-status span:not(:last-child) {
+    display: none;
+  }
+}
+
 .dashboard-shell {
   min-height: 100dvh;
   padding: clamp(1.25rem, 3vw, 3rem);
@@ -390,6 +1077,7 @@ body {
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 680;
+  text-decoration: none;
 }
 
 .obs-link-button:disabled,

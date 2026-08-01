@@ -1,8 +1,18 @@
 # Kick Streamer Companion
 
-A private, streamer-only overlay built with Next.js, eve, Supabase Postgres, and Vercel Workflow. It
+A multi-surface streamer companion built with Next.js, eve, PostgreSQL, and Vercel Workflow. It
 ingests signed Kick chat webhooks and creates one short talking-point cue every 30 seconds while a
 channel is live.
+
+The current unauthenticated demo surfaces are:
+
+- `/`: overlay studio and public-canvas editor
+- `/glasses`: private, glanceable agent suggestions and sensitive context
+- `/streamer`: phone-sized live brief, chat signals, and private notes
+- `/public/overlay`: the audience-facing 1920 × 1080 browser source
+
+Demo layout changes are stored in the browser's local storage, so the public overlay can be tested
+without a Kick connection or database setup.
 
 ## Kick developer setup
 
@@ -21,7 +31,7 @@ documented endpoints post and delete messages rather than read them.
 Copy `.env.example` to `.env.local` and set:
 
 - `APP_URL`: canonical deployment origin, without a trailing slash.
-- `DATABASE_URL`: direct Supabase Postgres connection string with SSL enabled.
+- `DATABASE_URL`: PostgreSQL connection string. Enable SSL when required by your database host.
 - `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET`: credentials from the Kick developer app.
 - `KICK_STATELESS_MODE`: profile/layout preview mode only. When enabled, it deliberately disables
   database persistence, Kick event subscriptions, live-chat ingestion, and suggestion workflows.
@@ -54,12 +64,12 @@ npm test
 npm run build
 ```
 
-The home page is cookie-authenticated. OAuth tokens remain encrypted server-side, and the overlay
+The production Kick connection flow is cookie-authenticated. OAuth tokens remain encrypted server-side, and the overlay
 never posts to Kick chat or embeds the livestream video. Live status is reconciled with Kick's
 channel API at most once every 10 seconds so a delayed or missed status webhook does not leave the
 dashboard stale.
 
 After connecting, the home page becomes an overlay editor. Drag the predefined widgets around the
-24 × 14 snap grid, then use **Copy OBS URL** and add that URL as a 1920 × 1080 OBS Browser Source.
-The browser-source page has a transparent, fixed-size canvas and uses an encrypted read-only link;
-disconnecting or reconnecting Kick invalidates the link. Treat the copied URL as a secret.
+24 × 14 snap grid, then add `/public/overlay` as a 1920 × 1080 OBS Browser Source. The public
+browser-source page has a transparent, fixed-size canvas and continuously receives the saved widget
+layout and live overlay state.
