@@ -6,13 +6,19 @@ import {
   CrownIcon,
   FlameIcon,
   GaugeIcon,
+  HandshakeIcon,
   SkullIcon,
   SmilePlusIcon,
   TargetIcon,
+  TrophyIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import type { OverlayState } from "@/lib/overlay-state";
+import type {
+  OverlayActionBet,
+  OverlayPrediction,
+  OverlayState,
+} from "@/lib/overlay-state";
 
 export function WidgetHeader({
   children,
@@ -34,6 +40,115 @@ export function WidgetHeader({
 interface OverlayWidgetProps {
   readonly label?: ReactNode;
   readonly state: OverlayState;
+}
+
+const PREDICTION_COLORS = ["#53fc18", "#ff6565", "#66a8ff", "#ffd23e"] as const;
+
+export function PredictionWidget({ label = "Prediction", state }: OverlayWidgetProps) {
+  const prediction = state.prediction;
+  const now = useWidgetClock(
+    prediction?.opensAt,
+    prediction?.status === "open" || prediction?.status === "scheduled",
+  );
+
+  if (!prediction) {
+    return (
+      <div className="canvas-widget-inner prediction-canvas-widget">
+        <WidgetHeader icon={<TrophyIcon size={17} />} label={label} />
+        <p className="widget-waiting">Waiting for the next prediction…</p>
+      </div>
+    );
+  }
+
+  const status = effectivePredictionStatus(prediction, now);
+  const opensAt = parseTimestamp(prediction.opensAt, now);
+  const locksAt = parseTimestamp(prediction.locksAt, opensAt);
+  const duration = Math.max(1, locksAt - opensAt);
+  const progress = status === "scheduled"
+    ? 0
+    : status === "locked" || status === "settled"
+      ? 100
+      : Math.max(0, Math.min(100, ((now - opensAt) / duration) * 100));
+  const winnerIds = predictionWinnerIds(prediction, status);
+
+  return (
+    <div className={`canvas-widget-inner prediction-canvas-widget status-${status}`}>
+      <WidgetHeader icon={<TrophyIcon size={17} />} label={label}>
+        <span className={`interaction-status ${status}`}>{predictionStatusLabel(status, opensAt, locksAt, now)}</span>
+      </WidgetHeader>
+      <div className="prediction-widget-content">
+        <p className="prediction-widget-question">{prediction.question}</p>
+        <div aria-hidden className="interaction-time-track">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+        <div className="prediction-widget-options">
+          {prediction.options.map((option, index) => {
+            const winner = winnerIds.has(option.id);
+            const muted = winnerIds.size > 0 && !winner;
+            return (
+              <div
+                className={`prediction-widget-option${winner ? " winner" : ""}${muted ? " muted" : ""}`}
+                key={option.id}
+                style={{ "--option-accent": PREDICTION_COLORS[index % PREDICTION_COLORS.length] } as CSSProperties}
+              >
+                <i style={{ width: `${Math.max(0, Math.min(100, option.percentage))}%` }} />
+                <span className="prediction-option-copy">
+                  <strong>{option.label}</strong>
+                  <span>{formatCompact(option.points)} pts</span>
+                  <b>{option.percentage}%</b>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <footer className="widget-footer interaction-widget-footer">
+        <span>Pool <strong>{formatCompact(prediction.totalPoints)} points</strong></span>
+        <span>Participants <strong>{formatCompact(prediction.participantCount)}</strong></span>
+      </footer>
+    </div>
+  );
+}
+
+export function ActionBetWidget({ label = "Action bet", state }: OverlayWidgetProps) {
+  const actionBet = state.actionBet;
+  const now = useWidgetClock(actionBet?.opensAt, actionBet?.status === "backing");
+
+  if (!actionBet) {
+    return (
+      <div className="canvas-widget-inner action-bet-canvas-widget">
+        <WidgetHeader icon={<HandshakeIcon size={17} />} label={label} />
+        <p className="widget-waiting">Waiting for a viewer proposal…</p>
+      </div>
+    );
+  }
+
+  const status = effectiveActionBetStatus(actionBet, now);
+  const opensAt = parseTimestamp(actionBet.opensAt, now);
+  const locksAt = parseTimestamp(actionBet.locksAt, opensAt);
+  const duration = Math.max(1, locksAt - opensAt);
+  const progress = status === "backing"
+    ? Math.max(0, Math.min(100, ((now - opensAt) / duration) * 100))
+    : 100;
+
+  return (
+    <div className={`canvas-widget-inner action-bet-canvas-widget status-${status}`}>
+      <WidgetHeader icon={<HandshakeIcon size={17} />} label={label}>
+        <span className={`interaction-status ${status}`}>{actionBetStatusLabel(status, locksAt, now)}</span>
+      </WidgetHeader>
+      <div className="action-bet-widget-content">
+        <span className="action-bet-category">{actionBet.category}</span>
+        <p>{actionBet.idea}</p>
+        <div aria-hidden className="interaction-time-track action-bet-time-track">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+      <footer className="widget-footer interaction-widget-footer">
+        <span>Backed by <strong>{formatCompact(actionBet.backerCount)} viewers</strong></span>
+        <span><strong>{formatCompact(actionBet.totalPoints)} points</strong></span>
+      </footer>
+    </div>
+  );
 }
 
 export function GoalsWidget({ label = "Stream goals", state }: OverlayWidgetProps) {
@@ -288,6 +403,88 @@ export function PulseWidget({ label = "Chat pulse", state }: OverlayWidgetProps)
       </div>
     </div>
   );
+}
+
+function useWidgetClock(fallbackValue: string | undefined, running: boolean): number {
+  const fallback = fallbackValue ? parseTimestamp(fallbackValue, 0) : 0;
+  const [now, setNow] = useState(fallback);
+
+  useEffect(() => {
+    if (!running) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 500);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  return now;
+}
+
+function effectivePredictionStatus(
+  prediction: OverlayPrediction,
+  now: number,
+): OverlayPrediction["status"] {
+  if (prediction.status === "settled" || prediction.status === "locked") return prediction.status;
+  const opensAt = parseTimestamp(prediction.opensAt, now);
+  const locksAt = parseTimestamp(prediction.locksAt, opensAt);
+  if (now >= locksAt) return "locked";
+  return now < opensAt ? "scheduled" : "open";
+}
+
+function predictionWinnerIds(
+  prediction: OverlayPrediction,
+  status: OverlayPrediction["status"],
+): ReadonlySet<string> {
+  if (status !== "locked" && status !== "settled") return new Set();
+  if (prediction.winnerOptionIds.length > 0) return new Set(prediction.winnerOptionIds);
+  const highestPoints = Math.max(0, ...prediction.options.map((option) => option.points));
+  return new Set(
+    prediction.options
+      .filter((option) => option.points === highestPoints)
+      .map((option) => option.id),
+  );
+}
+
+function predictionStatusLabel(
+  status: OverlayPrediction["status"],
+  opensAt: number,
+  locksAt: number,
+  now: number,
+): string {
+  if (status === "settled") return "Settled";
+  if (status === "locked") return "Result";
+  if (status === "scheduled") return `Opens in ${formatRemaining(opensAt - now)}`;
+  return `Locks in ${formatRemaining(locksAt - now)}`;
+}
+
+function effectiveActionBetStatus(
+  actionBet: OverlayActionBet,
+  now: number,
+): OverlayActionBet["status"] {
+  if (actionBet.status !== "backing") return actionBet.status;
+  return now >= parseTimestamp(actionBet.locksAt, now) ? "review" : "backing";
+}
+
+function actionBetStatusLabel(
+  status: OverlayActionBet["status"],
+  locksAt: number,
+  now: number,
+): string {
+  if (status === "accepted") return "Accepted";
+  if (status === "rejected") return "Closed";
+  if (status === "review") return "Streamer review";
+  return `Back for ${formatRemaining(locksAt - now)}`;
+}
+
+function parseTimestamp(value: string, fallback: number): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatRemaining(milliseconds: number): string {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1_000));
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
 function supporterDetail(kicks: number, giftedSubs: number): string {

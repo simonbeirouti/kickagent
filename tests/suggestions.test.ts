@@ -32,6 +32,8 @@ describe("suggestion generation contract", () => {
     });
     expect(prompt).toContain("Hardcore day 12");
     expect(prompt).toContain("(none)");
+    expect(prompt).toContain("There is no new chat");
+    expect(prompt).toContain("conversation starter");
   });
 
   it("includes the hype score, trend, and topics when the baseline is locked", () => {

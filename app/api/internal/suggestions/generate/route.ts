@@ -1,16 +1,14 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { generateText, Output } from "ai";
 import {
-  buildSuggestionPrompt,
-  SUGGESTION_SYSTEM_PROMPT,
   suggestionGenerationRequestSchema,
-  suggestionGenerationResponseSchema,
 } from "@/lib/suggestions";
+import {
+  generateSuggestion,
+  SuggestionGenerationTimeoutError,
+} from "@/lib/generate-suggestion";
 import { verifyInternalJwt } from "@/lib/security";
 
 export const runtime = "nodejs";
 
-const GENERATION_TIMEOUT_MS = 15_000;
 const responseHeaders = { "cache-control": "private, no-store, max-age=0" };
 
 export async function POST(request: Request): Promise<Response> {
@@ -34,30 +32,16 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsedRequest.success) return errorResponse("Invalid request.", 400);
 
   const startedAt = Date.now();
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, GENERATION_TIMEOUT_MS);
   console.info("[anthropic:suggestion] started", { connectionId });
   try {
-    const { output } = await generateText({
-      abortSignal: controller.signal,
-      maxOutputTokens: 120,
-      maxRetries: 1,
-      model: anthropic("claude-haiku-4-5"),
-      output: Output.object({ schema: suggestionGenerationResponseSchema }),
-      prompt: buildSuggestionPrompt(parsedRequest.data),
-      system: SUGGESTION_SYSTEM_PROMPT,
-    });
-    const result = suggestionGenerationResponseSchema.parse(output);
+    const statement = await generateSuggestion(parsedRequest.data);
     console.info("[anthropic:suggestion] completed", {
       connectionId,
       durationMs: Date.now() - startedAt,
     });
-    return Response.json(result, { headers: responseHeaders });
-  } catch {
+    return Response.json({ statement }, { headers: responseHeaders });
+  } catch (error) {
+    const timedOut = error instanceof SuggestionGenerationTimeoutError;
     const status = timedOut ? 504 : 502;
     console.error("[anthropic:suggestion] failed", {
       connectionId,
@@ -65,8 +49,6 @@ export async function POST(request: Request): Promise<Response> {
       status,
     });
     return errorResponse(timedOut ? "Suggestion generation timed out." : "Suggestion generation failed.", status);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 

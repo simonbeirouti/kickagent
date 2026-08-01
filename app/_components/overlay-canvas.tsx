@@ -3,23 +3,24 @@
 import {
   ActivityIcon,
   BellRingIcon,
-  Clock3Icon,
   CoinsIcon,
   CrownIcon,
   FlameIcon,
   GaugeIcon,
+  HandshakeIcon,
   MessageCircleIcon,
-  RadioIcon,
   SkullIcon,
   SmilePlusIcon,
   SparklesIcon,
   TargetIcon,
   Trash2Icon,
+  TrophyIcon,
   ZapIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import {
+  ActionBetWidget,
   AlertsWidget,
   BattleWidget,
   BossWidget,
@@ -27,6 +28,7 @@ import {
   GoalsWidget,
   JarWidget,
   LeaderboardWidget,
+  PredictionWidget,
   PulseWidget,
   WidgetHeader,
 } from "@/app/_components/overlay-widgets";
@@ -51,6 +53,7 @@ interface DragPayload {
 }
 
 export const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
+  actionBet: "Action bet",
   alerts: "Alerts",
   battle: "Hype battle",
   boss: "Stream boss",
@@ -60,11 +63,13 @@ export const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
   hype: "Agent energy",
   jar: "Support jar",
   leaderboard: "Top supporters",
+  prediction: "Prediction",
   pulse: "Chat pulse",
   suggestion: "Live brief",
 };
 
 const WIDGET_ICONS: Readonly<Record<WidgetKind, typeof SparklesIcon>> = {
+  actionBet: HandshakeIcon,
   alerts: BellRingIcon,
   battle: FlameIcon,
   boss: SkullIcon,
@@ -74,6 +79,7 @@ const WIDGET_ICONS: Readonly<Record<WidgetKind, typeof SparklesIcon>> = {
   hype: ActivityIcon,
   jar: CoinsIcon,
   leaderboard: CrownIcon,
+  prediction: TrophyIcon,
   pulse: GaugeIcon,
   suggestion: SparklesIcon,
 };
@@ -172,7 +178,7 @@ export function OverlayCanvas({
     >
       {layout.map((placement) => (
         <article
-          className={`canvas-widget ${publicMode ? "" : "editable"}`}
+          className={`canvas-widget widget-${placement.kind} ${publicMode ? "" : "editable"}`}
           draggable={!publicMode && resizingId !== placement.id}
           key={placement.id}
           onDragStart={
@@ -246,6 +252,8 @@ function WidgetContent({
   readonly label: ReactNode;
   readonly state: OverlayState;
 }) {
+  if (kind === "prediction") return <PredictionWidget label={label} state={state} />;
+  if (kind === "actionBet") return <ActionBetWidget label={label} state={state} />;
   if (kind === "goals") return <GoalsWidget label={label} state={state} />;
   if (kind === "leaderboard") return <LeaderboardWidget label={label} state={state} />;
   if (kind === "battle") return <BattleWidget label={label} state={state} />;
@@ -254,49 +262,21 @@ function WidgetContent({
   if (kind === "alerts") return <AlertsWidget label={label} state={state} />;
   if (kind === "emotes") return <EmoteWallWidget label={label} state={state} />;
   if (kind === "pulse") return <PulseWidget label={label} state={state} />;
+  // Suggestion and chat render chromeless (no header, transparent card) so the
+  // cue reads as a caption and chat as floating cards on the live stream.
   if (kind === "suggestion") {
     return (
       <div className="canvas-widget-inner suggestion-canvas-widget">
-        <WidgetHeader
-          icon={<SparklesIcon size={17} />}
-          label={label}
-        >
-          <Freshness generatedAt={state.summary?.generatedAt} stale={state.summary?.stale} />
-        </WidgetHeader>
         <div className="suggestion-content">
-          <p>{state.summary?.text ?? "Waiting for the first agent brief…"}</p>
-        </div>
-        <div className="live-cue">
-          <span><SparklesIcon size={13} /> Next talking point</span>
           <p>{suggestionText(state)}</p>
         </div>
-        <footer className="widget-footer">
-          <span>{state.channel.streamTitle || "No stream title"}</span>
-          <span>{state.channel.category || "No category"}</span>
-        </footer>
       </div>
     );
   }
   if (kind === "chat") {
     return (
       <div className="canvas-widget-inner chat-canvas-widget">
-        <WidgetHeader
-          icon={<MessageCircleIcon size={17} />}
-          label={label}
-        >
-          <span className="count-badge">{state.messages.length}/5</span>
-        </WidgetHeader>
-        <div className="message-list">
-          {state.messages.length === 0 ? (
-            <div className="empty-messages"><RadioIcon size={20} /></div>
-          ) : state.messages.map((message) => (
-            <div className="chat-message" key={message.id}>
-              <span className="chat-user">{message.username}</span>
-              <span className="chat-copy">{message.content}</span>
-              <time>{relativeTime(message.createdAt)}</time>
-            </div>
-          ))}
-        </div>
+        <RecentChatCards messages={state.messages} />
       </div>
     );
   }
@@ -366,8 +346,26 @@ function EditableWidgetText({
   );
 }
 
-function Freshness({ generatedAt, stale }: { readonly generatedAt?: string; readonly stale?: boolean }) {
-  return <span className={stale ? "freshness stale" : "freshness"}><Clock3Icon size={13} />{generatedAt ? (stale ? "Delayed" : relativeTime(generatedAt)) : "Waiting"}</span>;
+function RecentChatCards({
+  messages,
+}: {
+  readonly messages: OverlayState["messages"];
+}) {
+  if (messages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="message-list">
+      {messages.slice(-5).map((message) => (
+        <div className="chat-message" key={message.id}>
+          <span className="chat-user">{message.username}</span>
+          <span className="chat-copy">{message.content}</span>
+          <time>{relativeTime(message.createdAt)}</time>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function startPlacedDrag(event: DragEvent<HTMLElement>, placement: WidgetPlacement) {

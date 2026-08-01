@@ -86,4 +86,12 @@ describe("overlay layout", () => {
   it("falls back to the default layout for invalid stored JSON", () => {
     expect(parseOverlayLayout({ broken: true })).toEqual(DEFAULT_OVERLAY_LAYOUT);
   });
+
+  it("recovers layouts that were double-encoded in jsonb", () => {
+    const moved = [{ height: 5, id: "hype", kind: "hype" as const, width: 8, x: 2, y: 3 }];
+
+    expect(parseOverlayLayout(JSON.stringify(moved))).toEqual(moved);
+    expect(parseScreenLayouts({ public: JSON.stringify(moved) }, DEFAULT_OVERLAY_LAYOUT))
+      .toEqual({ public: moved });
+  });
 });

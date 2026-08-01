@@ -26,6 +26,36 @@ export interface OverlaySupporter {
   readonly username: string;
 }
 
+export interface OverlayPredictionOption {
+  readonly id: string;
+  readonly label: string;
+  readonly percentage: number;
+  readonly points: number;
+}
+
+export interface OverlayPrediction {
+  readonly id: string;
+  readonly locksAt: string;
+  readonly opensAt: string;
+  readonly options: readonly OverlayPredictionOption[];
+  readonly participantCount: number;
+  readonly question: string;
+  readonly status: "locked" | "open" | "scheduled" | "settled";
+  readonly totalPoints: number;
+  readonly winnerOptionIds: readonly string[];
+}
+
+export interface OverlayActionBet {
+  readonly backerCount: number;
+  readonly category: string;
+  readonly id: string;
+  readonly idea: string;
+  readonly locksAt: string;
+  readonly opensAt: string;
+  readonly status: "accepted" | "backing" | "rejected" | "review";
+  readonly totalPoints: number;
+}
+
 export interface OverlayState {
   readonly activeBet: {
     readonly amount: number;
@@ -41,6 +71,7 @@ export interface OverlayState {
     readonly slug: string;
     readonly streamTitle: string | null;
   };
+  readonly actionBet: OverlayActionBet | null;
   readonly alerts?: readonly OverlayAlert[];
   readonly battle?: {
     readonly fire: number;
@@ -68,13 +99,7 @@ export interface OverlayState {
     readonly id: string;
     readonly username: string;
   }[];
-  readonly prediction: {
-    readonly endsInSeconds: number;
-    readonly noPool: number;
-    readonly question: string;
-    readonly yesPercent: number;
-    readonly yesPool: number;
-  } | null;
+  readonly prediction: OverlayPrediction | null;
   readonly privateContext?: {
     readonly headline: string;
     readonly notes: readonly string[];
@@ -101,6 +126,7 @@ export interface OverlayState {
 
 export function createDemoOverlayState(now = new Date()): OverlayState {
   const secondsAgo = (seconds: number) => new Date(now.getTime() - seconds * 1_000).toISOString();
+  const secondsFromNow = (seconds: number) => new Date(now.getTime() + seconds * 1_000).toISOString();
 
   return {
     activeBet: {
@@ -108,6 +134,16 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       payout: null,
       status: "pending",
       text: "Talk to the girls on the left",
+    },
+    actionBet: {
+      backerCount: 9,
+      category: "Performance",
+      id: "demo-action-bet",
+      idea: "Play the next round using a random character",
+      locksAt: secondsFromNow(42),
+      opensAt: secondsAgo(18),
+      status: "backing",
+      totalPoints: 850,
     },
     alerts: [
       { detail: "just followed the channel", emoji: "💚", headline: "pixelpilot", id: "demo-alert-1", variant: "follow" },
@@ -168,11 +204,18 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       },
     ],
     prediction: {
-      endsInSeconds: 313,
-      noPool: 506,
-      question: "Will you hit 13,000 trophies this stream?",
-      yesPercent: 62,
-      yesPool: 824,
+      id: "demo-prediction",
+      locksAt: secondsFromNow(6),
+      opensAt: secondsAgo(4),
+      options: [
+        { id: "yes", label: "Yes", percentage: 29, points: 200 },
+        { id: "no", label: "No", percentage: 71, points: 500 },
+      ],
+      participantCount: 14,
+      question: "Will Neon hit 13,000 trophies this stream?",
+      status: "open",
+      totalPoints: 700,
+      winnerOptionIds: [],
     },
     privateContext: {
       headline: "Keep the product name private until the reveal",

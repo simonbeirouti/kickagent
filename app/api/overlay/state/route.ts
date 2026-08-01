@@ -1,3 +1,4 @@
+import { start } from "workflow/api";
 import { query } from "@/lib/db";
 import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
 import { getKickChannel } from "@/lib/kick/oauth";
@@ -5,6 +6,7 @@ import {
   findConnectionById,
   findOwnerConnection,
   refreshKickChannelIfStale,
+  upgradeSuggestionWorkflow,
 } from "@/lib/kick/repository";
 import {
   DEFAULT_OVERLAY_LAYOUT,
@@ -17,6 +19,8 @@ import {
   statelessKickMode,
   statelessSessionFromRequest,
 } from "@/lib/session";
+import { SUGGESTION_WORKFLOW_VERSION } from "@/lib/suggestion-cadence";
+import { kickSuggestionWorkflow } from "@/workflows/kick-suggestions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,6 +73,7 @@ export async function GET(request: Request): Promise<Response> {
     }
     return Response.json(
       {
+        actionBet: null,
         activeBet: null,
         authenticated: true,
         channel: {
@@ -116,6 +121,18 @@ export async function GET(request: Request): Promise<Response> {
   let connection = publicConnection ?? (await findConnectionById(connectionId));
   if (!connection || !connection.active) {
     return Response.json({ authenticated: false }, { headers: noStoreHeaders(), status: 401 });
+  }
+  if (connection.suggestion_workflow_version < SUGGESTION_WORKFLOW_VERSION) {
+    const upgradedConnection = await upgradeSuggestionWorkflow(connection.id);
+    if (upgradedConnection) {
+      connection = upgradedConnection;
+      await start(kickSuggestionWorkflow, [connection.id, connection.workflow_generation]);
+      console.info("[suggestion:workflow] upgraded", {
+        connectionId: connection.id,
+        generation: connection.workflow_generation,
+        version: connection.suggestion_workflow_version,
+      });
+    }
   }
   if (
     overlayAccess?.kind === "connection" &&
@@ -169,6 +186,7 @@ export async function GET(request: Request): Promise<Response> {
     (!suggestion || Date.now() - generatedAt > 90_000 || latest?.status === "failed");
   return Response.json(
     {
+      actionBet: null,
       activeBet: null,
       authenticated: true,
       channel: {

@@ -83,7 +83,9 @@ export const SUGGESTION_SYSTEM_PROMPT = [
   "Never quote or engage users listed as flagged spammers; discount their lines in chat.",
   "Do not repeat a recent suggestion.",
   "Do not claim something is trending or factual unless the supplied context establishes it.",
-  "When chat is empty, use the stream title and category to introduce a natural topic.",
+  "When there are no new chat messages, act as the streamer's conversation partner.",
+  "Use the stream title or category when useful; otherwise suggest a varied, natural question or topic.",
+  "Prefer open-ended prompts that invite a story or opinion, not trivia with an unknown answer.",
   "Keep the statement at or below 140 characters and easy to say out loud.",
 ].join(" ");
 
@@ -102,7 +104,9 @@ export function buildSuggestionPrompt(input: SuggestionGenerationRequest): strin
     "</untrusted_chat_records>",
     "Recent suggestions that must not be repeated:",
     input.recentSuggestions.length === 0 ? "(none)" : input.recentSuggestions.join("\n"),
-    "Return one fresh statement. Prefer chat when it contains a clear audience interest.",
+    input.messages.length === 0
+      ? "There is no new chat. Offer a fresh conversation starter for the streamer."
+      : "Return one fresh statement based on the clearest audience interest in this chat.",
   ]
     .filter((line): line is string => line !== null)
     .join("\n\n");
