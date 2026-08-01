@@ -226,12 +226,6 @@ export function KickOverlay({
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
-      {!state.ingestionEnabled ? (
-        <div className="error-banner">
-          Live chat and suggestions are disabled while Kick stateless mode is enabled. Reconnect
-          with database-backed mode enabled to subscribe to Kick chat events.
-        </div>
-      ) : null}
 
       <div className="editor-layout">
         <aside className="widget-library">
