@@ -111,7 +111,9 @@ describe("public overlay state", () => {
     query
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([analysis])
-      .mockResolvedValueOnce([analysis]);
+      .mockResolvedValueOnce([analysis])
+      // Remaining queries (hype lookback) return no rows.
+      .mockResolvedValue([]);
 
     const response = await GET(new Request("http://localhost/api/overlay/state?public=overlay"));
 
