@@ -51,7 +51,8 @@ ALTER TABLE kick_connections
   ADD COLUMN IF NOT EXISTS screen_layouts jsonb NOT NULL DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS suggestion_message_count integer NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS suggestion_next_at timestamptz NOT NULL DEFAULT (now() + interval '30 seconds'),
-  ADD COLUMN IF NOT EXISTS suggestion_window_start timestamptz NOT NULL DEFAULT now();
+  ADD COLUMN IF NOT EXISTS suggestion_window_start timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS suggestion_workflow_version integer NOT NULL DEFAULT 0;
 
 -- statement-breakpoint
 UPDATE kick_connections

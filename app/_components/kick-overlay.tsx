@@ -581,29 +581,13 @@ function RecentChatCards({
 }: {
   readonly messages: OverlayState["messages"];
 }) {
-  const [now, setNow] = useState<number>();
-
-  useEffect(() => {
-    const updateNow = () => setNow(Date.now());
-    updateNow();
-    const timer = window.setInterval(updateNow, 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const recentMessages = now === undefined
-    ? []
-    : messages.filter((message) => {
-        const createdAt = Date.parse(message.createdAt);
-        return Number.isFinite(createdAt) && now - createdAt < 60_000;
-      });
-
-  if (recentMessages.length === 0) {
+  if (messages.length === 0) {
     return null;
   }
 
   return (
     <div className="message-list">
-      {recentMessages.map((message) => (
+      {messages.slice(-5).map((message) => (
         <div className="chat-message" key={message.id}>
           <span className="chat-user">{message.username}</span>
           <span className="chat-copy">{message.content}</span>

@@ -1,0 +1,1 @@
+export const SUGGESTION_WORKFLOW_VERSION = 1;
