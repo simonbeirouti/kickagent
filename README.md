@@ -1,6 +1,6 @@
 # Kick Streamer Companion
 
-A multi-surface streamer companion built with Next.js, eve, PostgreSQL, Anthropic, and Vercel Workflow. It
+A multi-surface streamer companion built with Next.js, PostgreSQL, Anthropic, and Vercel Workflow. It
 ingests signed Kick chat webhooks and creates a talking-point cue after five new messages or 30
 seconds, whichever happens first.
 
@@ -28,23 +28,14 @@ Kick channel and PostgreSQL. The live surfaces poll fresh server state every two
 ```bash
 npm install
 npm run db:migrate
-npm run dev:eve
+npm run dev
 ```
-
-`npm run dev` still runs plain Next.js development. Use `npm run dev:eve` while troubleshooting so
-Eve session and application logs are shown together on the `APP_URL` port.
 
 ## Stream diagnostics
 
 Incoming Kick comments log under `[kick:chat]`, cadence decisions under `[suggestion:trigger]`, and
 direct model calls under `[anthropic:suggestion]`. The logs include message and window IDs but never
 prompts, chat content, API keys, or authentication tokens.
-
-```bash
-npx eve logs --events
-npx eve traces ls
-npx eve traces <trace-id>
-```
 
 ## Verification
 

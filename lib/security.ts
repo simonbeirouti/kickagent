@@ -78,15 +78,15 @@ export function signInternalJwt(
   const connectionId =
     typeof connectionIdOrNow === "string" ? connectionIdOrNow : undefined;
   const now = connectionIdOrNow instanceof Date ? connectionIdOrNow : suppliedNow ?? new Date();
-  const secret = requiredEnv("EVE_INTERNAL_AUTH_SECRET");
+  const secret = requiredEnv("INTERNAL_API_AUTH_SECRET");
   if (secret.length < 32) {
-    throw new Error("EVE_INTERNAL_AUTH_SECRET must contain at least 32 characters.");
+    throw new Error("INTERNAL_API_AUTH_SECRET must contain at least 32 characters.");
   }
   const header = base64Url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const issuedAt = Math.floor(now.getTime() / 1000);
   const payload = base64Url(
     JSON.stringify({
-      aud: "eve-internal",
+      aud: "kickagent-internal",
       exp: issuedAt + 120,
       iat: issuedAt,
       iss: "kickagent",
@@ -109,9 +109,9 @@ export function verifyInternalJwt(token: string, now = new Date()): InternalJwtC
   if (!encodedHeader || !encodedPayload || !suppliedSignature || extraParts.length > 0) {
     throw new Error("Invalid internal token.");
   }
-  const secret = requiredEnv("EVE_INTERNAL_AUTH_SECRET");
+  const secret = requiredEnv("INTERNAL_API_AUTH_SECRET");
   if (secret.length < 32) {
-    throw new Error("EVE_INTERNAL_AUTH_SECRET must contain at least 32 characters.");
+    throw new Error("INTERNAL_API_AUTH_SECRET must contain at least 32 characters.");
   }
   const expectedSignature = createHmac("sha256", secret)
     .update(`${encodedHeader}.${encodedPayload}`)
@@ -133,7 +133,7 @@ export function verifyInternalJwt(token: string, now = new Date()): InternalJwtC
     if (
       header.alg !== "HS256" ||
       header.typ !== "JWT" ||
-      payload.aud !== "eve-internal" ||
+      payload.aud !== "kickagent-internal" ||
       payload.iss !== "kickagent" ||
       payload.sub !== "kick-analysis" ||
       typeof payload.exp !== "number" ||

@@ -12,7 +12,7 @@ import {
 describe("security helpers", () => {
   beforeEach(() => {
     process.env.TOKEN_ENCRYPTION_KEY = "test-encryption-key-with-at-least-32-characters";
-    process.env.EVE_INTERNAL_AUTH_SECRET = "test-internal-secret-with-at-least-32-characters";
+    process.env.INTERNAL_API_AUTH_SECRET = "test-internal-secret-with-at-least-32-characters";
   });
 
   it("encrypts and authenticates secrets", () => {
@@ -34,7 +34,7 @@ describe("security helpers", () => {
     const [header, payload, signature] = token.split(".");
     expect(JSON.parse(Buffer.from(header, "base64url").toString())).toMatchObject({ alg: "HS256" });
     expect(JSON.parse(Buffer.from(payload, "base64url").toString())).toMatchObject({
-      aud: "eve-internal",
+      aud: "kickagent-internal",
       exp: 1785542520,
       iss: "kickagent",
       sub: "kick-analysis",

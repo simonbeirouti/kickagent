@@ -25,7 +25,7 @@ const validBody = {
 describe("internal suggestion generation route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.EVE_INTERNAL_AUTH_SECRET = "test-internal-secret-with-at-least-32-characters";
+    process.env.INTERNAL_API_AUTH_SECRET = "test-internal-secret-with-at-least-32-characters";
     generateText.mockResolvedValue({ output: { statement: "Ask chat which setup upgrade mattered most." } });
   });
 
