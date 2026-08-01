@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kick-Ass(istant) — Hype Engine Demo</title>
+<style>
+  :root {
+    --green: #53fc18; --bg: #0b0e0c; --panel: #12170f;
+    --border: #223026; --text: #f2f5f0; --muted: #8fa08f;
+    --amber: #ffb020; --red: #ff4d4d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.7rem 1.2rem; border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 1rem; letter-spacing: 0.15em; }
+  header h1 span { color: var(--green); }
+  header .clock { color: var(--muted); font-variant-numeric: tabular-nums; }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.45rem 0.9rem; font-size: 0.85rem; cursor: pointer;
+  }
+  button:hover { border-color: var(--green); }
+  button.primary { background: var(--green); color: #08210a; font-weight: 700; border-color: var(--green); }
+
+  main { flex: 1; display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; padding: 1rem; min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+  .card h2 { font-size: 0.75rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--green); margin-bottom: 0.8rem; }
+
+  /* Hype meter — vertical bar beside the readout */
+  .hype-body { display: flex; align-items: flex-end; gap: 1.4rem; margin-top: 0.4rem; }
+  #hypeNum { font-size: 4.6rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  #hypeNum small { font-size: 1.4rem; color: var(--muted); font-weight: 600; }
+  #trend { font-size: 1rem; margin-left: 0.6rem; }
+  .hype-readout { flex: 1; min-width: 0; }
+  .meter {
+    position: relative; width: 52px; height: 230px; flex-shrink: 0;
+    background: #0a0f09; border: 1px solid var(--border); border-radius: 26px; overflow: hidden;
+  }
+  .meter > div {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+    background: linear-gradient(0deg, #1f7a12, var(--green)); border-radius: 26px; transition: none;
+  }
+
+  /* Past 90: the fill pulses to say "almost maxed". */
+  @keyframes meterFlash {
+    0%, 100% { filter: brightness(1); box-shadow: 0 0 0 rgba(255,176,32,0); }
+    50% { filter: brightness(1.5); box-shadow: 0 0 18px 3px rgba(255,176,32,.85); }
+  }
+  .meter.flash > div { animation: meterFlash 0.5s ease-in-out infinite; }
+
+  /* At 100: the whole bar goes off. */
+  @keyframes meterCrazyBg {
+    0% { background: linear-gradient(0deg, #ff4d4d, #ffb020); }
+    33% { background: linear-gradient(0deg, #ffb020, var(--green)); }
+    66% { background: linear-gradient(0deg, var(--green), #4dd2ff); }
+    100% { background: linear-gradient(0deg, #4dd2ff, #ff4d4d); }
+  }
+  @keyframes meterCrazyGlow {
+    0%, 100% { filter: brightness(1.2); box-shadow: 0 0 10px 2px rgba(255,255,255,.5); }
+    50% { filter: brightness(1.8); box-shadow: 0 0 30px 8px rgba(255,255,255,.9); }
+  }
+  @keyframes meterCrazyShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+  }
+  .meter.crazy { animation: meterCrazyShake 0.12s linear infinite; }
+  .meter.crazy > div { animation: meterCrazyBg 0.7s linear infinite, meterCrazyGlow 0.25s ease-in-out infinite; }
+  .meta { display: flex; gap: 1.4rem; margin-top: 0.7rem; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  #readyBadge {
+    display: inline-block; margin-top: 0.8rem; padding: 0.3rem 0.7rem; border-radius: 7px;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
+    background: rgba(255,176,32,.12); color: var(--amber); border: 1px solid var(--amber);
+  }
+  #readyBadge.open { background: rgba(83,252,24,.1); color: var(--green); border-color: var(--green); }
+
+  /* Topics */
+  .topic { display: grid; grid-template-columns: 1.4rem 7.5rem 1fr 2.2rem; align-items: center; gap: 0.6rem; margin: 0.5rem 0; font-size: 0.9rem; }
+  .topic .bar { height: 8px; background: #0a0f09; border-radius: 4px; overflow: hidden; }
+  .topic .bar > div { height: 100%; background: var(--green); border-radius: 4px; }
+  .topic .t-rising { color: var(--green); }
+  .topic .t-falling { color: var(--red); }
+  .topic .t-steady { color: var(--muted); }
+
+  /* Feeds */
+  .feed { flex: 1; overflow-y: auto; min-height: 0; }
+
+  .toast { border: 1px solid var(--green); background: rgba(83,252,24,.07); border-radius: 10px; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; font-size: 0.9rem; }
+  .toast .when { color: var(--muted); font-size: 0.72rem; margin-top: 0.25rem; }
+  .toast.flag { border-color: var(--red); background: rgba(255,77,77,.07); }
+  .toast.trending { border-color: var(--amber); background: rgba(255,176,32,.07); }
+  .toast.trending b { color: var(--amber); }
+  .toast.impact-up { border-color: var(--green); }
+  .toast.impact-flat { border-color: var(--amber); background: rgba(255,176,32,.07); }
+  .toast.impact-down { border-color: var(--red); background: rgba(255,77,77,.07); }
+  .toast.clip { border-color: var(--green); background: rgba(83,252,24,.12); }
+
+  /* Highlights recap */
+  #highlightsCard { display: flex; flex-direction: column; min-height: 0; max-height: 34%; }
+  #highlights { overflow-y: auto; min-height: 0; }
+  #highlights .empty { color: var(--muted); font-size: 0.82rem; }
+  .hl { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+  .hl:last-child { border-bottom: none; }
+  .hl .range { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hl .head { flex: 1; color: var(--text); }
+  .hl .peak { color: var(--amber); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hl .topic { color: var(--muted); white-space: nowrap; }
+
+  #chatCard, #assistCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* Live mode (?source=live): real SSE events, no chat pane. */
+  #srcBadge {
+    padding: 0.25rem 0.6rem; border-radius: 7px; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.1em; border: 1px solid var(--border); color: var(--muted);
+  }
+  #srcBadge.live-on { color: var(--green); border-color: var(--green); background: rgba(83,252,24,.08); }
+  #srcBadge.live-off { color: var(--red); border-color: var(--red); background: rgba(255,77,77,.08); }
+  body.live #chatCol { display: none; }
+  body.live main { grid-template-columns: 1.15fr 1fr; }
+  body.live .mock-only { display: none; }
+
+  /* Prediction popup — viewer betting without leaving the live dashboard. */
+  #predictionPopup { position: fixed; right: 14px; bottom: 14px; z-index: 20; width: min(390px, calc(100vw - 28px)); }
+  #predictionPopup[hidden] { display: none; }
+  .pred-card { background: #181d1b; border: 1px solid #334039; border-radius: 16px; padding: 12px; box-shadow: 0 22px 65px rgb(0 0 0 / 62%); }
+  .pred-close { width: 27px; height: 27px; padding: 0; border-radius: 50%; font-size: 1rem; line-height: 1; }
+  .pred-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .pred-heading-actions { display: flex; align-items: center; gap: 5px; }
+  .pred-question { margin: 0; font-size: .98rem; line-height: 1.3; }
+  .pred-status { flex-shrink: 0; padding: 3px 7px; border: 1px solid rgb(83 252 24 / 48%); border-radius: 999px; color: var(--green); font-size: .61rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+  .pred-status.locked { border-color: var(--amber); color: var(--amber); }
+  .pred-time { display: flex; justify-content: space-between; margin: 8px 0 4px; color: var(--muted); font-size: .68rem; }
+  .pred-time strong { color: var(--text); font-variant-numeric: tabular-nums; }
+  .pred-progress { height: 5px; margin-bottom: 9px; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 8%); }
+  .pred-progress > div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #27a80f, var(--green)); transition: width .2s linear; }
+  .pred-stake { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; color: var(--muted); font-size: .68rem; }
+  .pred-stake > span { margin-right: auto; }
+  .pred-chip { min-width: 32px; padding: 4px 5px; border-radius: 6px; color: var(--muted); font-size: .66rem; }
+  .pred-chip.active { border-color: var(--green); color: var(--green); background: rgb(83 252 24 / 8%); }
+  .pred-input { width: 50px; padding: 4px 5px; border: 1px solid var(--border); border-radius: 6px; outline: 0; background: #0d110f; color: var(--text); font-size: .66rem; font-variant-numeric: tabular-nums; }
+  .pred-input:focus { border-color: var(--green); }
+  .pred-options { display: grid; gap: 7px; }
+  .pred-option { --option: var(--green); position: relative; min-height: 47px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: #0d110f; }
+  .pred-option.winner { border-color: var(--option); box-shadow: 0 0 0 1px var(--option), 0 0 20px color-mix(in srgb, var(--option) 18%, transparent); }
+  .pred-fill { position: absolute; inset: 0 auto 0 0; width: var(--share); background: color-mix(in srgb, var(--option) 22%, transparent); transition: width .2s ease; }
+  .pred-option-content { position: relative; display: grid; grid-template-columns: minmax(48px, 1fr) auto auto auto; align-items: center; gap: 7px; min-height: 47px; padding: 0 8px; }
+  .pred-option-name { color: var(--option); font-size: .88rem; font-weight: 800; text-transform: uppercase; }
+  .pred-points { color: var(--muted); font-size: .68rem; font-variant-numeric: tabular-nums; }
+  .pred-percent { color: var(--option); font-size: .92rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .pred-actions { display: flex; gap: 3px; }
+  .pred-action { height: 27px; padding: 0 7px; border-radius: 6px; font-size: .66rem; font-weight: 700; }
+  .pred-action:hover:not(:disabled) { border-color: var(--option); color: var(--option); }
+  .pred-action:disabled { cursor: not-allowed; opacity: .42; }
+  .pred-footer { display: flex; gap: 16px; margin-top: 8px; color: var(--muted); font-size: .69rem; }
+  .pred-footer strong { color: var(--text); font-variant-numeric: tabular-nums; }
+  .pred-readonly { margin-bottom: 8px; color: var(--muted); font-size: .68rem; }
+  #predictionCelebration { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: none; background: transparent; }
+  #predictionCelebration[hidden] { display: none; }
+  @keyframes celebrationMessage { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.55); filter: blur(8px); } 18%, 72% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); } 100% { opacity: 0; transform: translate(-50%, -54%) scale(1.06); } }
+  @keyframes ribbonFall { 0% { opacity: 0; transform: translate3d(0, -15vh, 0) rotate(0deg); } 10% { opacity: 1; } 100% { opacity: 0; transform: translate3d(var(--drift), 115vh, 0) rotate(var(--spin)); } }
+  @keyframes celebrationRay { 0%,100% { opacity: 0; transform: translate(-50%, -50%) scale(.4) rotate(0); } 22%,70% { opacity: .28; transform: translate(-50%, -50%) scale(1) rotate(25deg); } }
+  .celebration-rays { position: absolute; left: 50%; top: 50%; width: min(80vw, 760px); aspect-ratio: 1; border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgb(83 252 24 / 24%) 0 7deg, transparent 7deg 18deg); mask-image: radial-gradient(circle, transparent 0 18%, black 46%, transparent 72%); animation: celebrationRay 2.2s ease both; }
+  .celebration-message { position: absolute; left: 50%; top: 48%; width: min(680px, calc(100vw - 36px)); padding: 22px 28px; border: 1px solid rgb(83 252 24 / 70%); border-radius: 18px; background: rgb(10 16 11 / 62%); backdrop-filter: blur(7px); text-align: center; box-shadow: 0 0 70px rgb(83 252 24 / 26%); animation: celebrationMessage 2.2s ease both; }
+  .celebration-message span { display: block; color: var(--green); font-size: .72rem; font-weight: 900; letter-spacing: .2em; text-transform: uppercase; }
+  .celebration-message strong { display: block; margin: 5px 0; color: var(--text); font-size: clamp(1.7rem, 5vw, 3.5rem); line-height: 1.05; text-shadow: 0 0 28px rgb(83 252 24 / 42%); }
+  .celebration-message small { color: #d6e2d4; font-size: clamp(.8rem, 2vw, 1rem); }
+  .celebration-ribbon { position: absolute; left: var(--x); top: -30px; width: 8px; height: 34px; border-radius: 2px; background: var(--ribbon); animation: ribbonFall var(--duration) cubic-bezier(.2,.7,.35,1) var(--delay) both; }
+  @media (prefers-reduced-motion: reduce) { .celebration-rays,.celebration-message,.celebration-ribbon { animation-duration: .01ms; animation-iteration-count: 1; } }
+
+  /* Action bets are a separate viewer proposal surface. */
+  #actionBetPopup { position: fixed; right: 14px; bottom: 14px; z-index: 21; width: min(620px, calc(100vw - 28px)); }
+  #actionBetPopup[hidden] { display: none; }
+  .action-card { background: #202322; border: 1px solid #3a403d; border-radius: 16px; padding: 16px; box-shadow: 0 22px 65px rgb(0 0 0 / 68%); }
+  .action-toolbar { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; }
+  .action-tab { padding: 7px 11px; color: var(--muted); }
+  .action-tab.active { border-color: var(--green); color: var(--green); background: rgb(83 252 24 / 7%); }
+  .action-balance { margin-left: auto; padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .78rem; }
+  .action-balance strong { color: var(--text); font-size: .9rem; }
+  .action-close { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 1.05rem; }
+  .action-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .action-title { margin: 0; font-size: 1.05rem; }
+  .action-phase { padding: 4px 8px; border-radius: 999px; background: #292f2c; color: var(--text); font-size: .7rem; font-weight: 700; white-space: nowrap; }
+  .action-copy { margin: 5px 0 14px; color: var(--muted); font-size: .82rem; }
+  .action-fields { display: grid; grid-template-columns: 1fr 155px; gap: 10px; }
+  .action-field { display: grid; gap: 5px; color: var(--text); font-size: .75rem; }
+  .action-field input, .action-field select { width: 100%; padding: 10px 11px; border: 1px solid #3a403d; border-radius: 9px; outline: 0; background: #161918; color: var(--text); font: inherit; }
+  .action-field input:focus, .action-field select:focus { border-color: var(--green); }
+  .action-submit { margin-top: 11px; background: var(--green); border-color: var(--green); color: #08210a; font-weight: 800; }
+  .action-streamer-note { padding: 16px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: .82rem; }
+  .action-proposal { padding: 11px; border: 1px solid #3a403d; border-radius: 10px; background: #161918; }
+  .action-proposal h4 { margin: 0 0 4px; font-size: .94rem; line-height: 1.35; }
+  .action-category { color: var(--green); font-size: .68rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+  .action-time { display: flex; justify-content: space-between; margin: 10px 0 5px; color: var(--muted); font-size: .72rem; }
+  .action-time strong { color: var(--text); font-variant-numeric: tabular-nums; }
+  .action-progress { height: 6px; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 8%); }
+  .action-progress > div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #217d11, var(--green)); transition: width .2s linear; }
+  .action-stats { display: flex; gap: 18px; margin: 9px 0; color: var(--muted); font-size: .74rem; }
+  .action-stats strong { color: var(--text); }
+  .action-backing { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .action-backing > span { color: var(--muted); font-size: .72rem; }
+  .action-back-input { width: 68px; padding: 7px 8px; border: 1px solid #3a403d; border-radius: 8px; outline: 0; background: #111412; color: var(--text); font-variant-numeric: tabular-nums; }
+  .action-back-input:focus { border-color: var(--green); }
+  .action-back-button { margin-left: auto; background: var(--green); border-color: var(--green); color: #08210a; font-weight: 800; }
+  .action-review-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+  .action-accept { background: var(--green); border-color: var(--green); color: #08210a; font-weight: 800; }
+  .action-reject { border-color: var(--red); color: var(--red); }
+  .action-modify { border-color: var(--amber); color: var(--amber); }
+  .action-modify-form { display: grid; gap: 8px; margin-top: 10px; }
+  .action-modify-form input { width: 100%; padding: 9px 10px; border: 1px solid var(--amber); border-radius: 8px; outline: 0; background: #161918; color: var(--text); }
+  .action-modify-note { color: var(--muted); font-size: .68rem; }
+  .action-result { margin-top: 10px; padding: 10px; border-radius: 9px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
+  .action-result.accepted { color: var(--green); background: rgb(83 252 24 / 9%); border: 1px solid rgb(83 252 24 / 35%); }
+  .action-result.rejected { color: var(--red); background: rgb(255 77 77 / 9%); border: 1px solid rgb(255 77 77 / 35%); }
+  @media (max-width: 430px) { #predictionPopup { right: 8px; bottom: 8px; width: calc(100vw - 16px); } }
+  @media (max-width: 650px) { #actionBetPopup { right: 8px; bottom: 8px; width: calc(100vw - 16px); } .action-fields { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>KICK-ASS<span>(ISTANT)</span> · HYPE ENGINE</h1>
+  <span class="clock" id="clock">0:00</span>
+  <span id="srcBadge">MOCK REPLAY</span>
+  <div class="spacer"></div>
+  <button id="predictionBtn">Predictions</button>
+  <button id="actionBetBtn">Bet Action</button>
+  <button id="playBtn" class="primary mock-only">Pause</button>
+  <button id="speedBtn" class="mock-only">Speed 1×</button>
+  <button id="restartBtn">Restart</button>
+  <button id="burstBtn" class="mock-only">Inject hype burst</button>
+  <button id="spamBtn" class="mock-only">Inject spammer</button>
+  <button id="dareBtn">Hit Me, Kick Me</button>
+</header>
+
+<aside id="predictionCelebration" aria-live="assertive" hidden></aside>
+
+<main>
+  <div class="col">
+    <div class="card">
+      <h2>Hype Score · streamer-only</h2>
+      <div class="hype-body">
+        <div class="meter" id="meterBar"><div id="meterFill"></div></div>
+        <div class="hype-readout">
+          <div><span id="hypeNum">0<small>/100</small></span><span id="trend"></span></div>
+          <div class="meta">
+            <span>raw <b id="rawV">0</b></span>
+            <span>baseline <b id="baseV">0</b></span>
+            <span>z <b id="zV">0</b></span>
+          </div>
+          <div id="readyBadge">CALIBRATING BASELINE…</div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="flex:1; min-height:0;">
+      <h2>Hot Topics · what chat cares about</h2>
+      <div id="topics"></div>
+    </div>
+    <div class="card" id="highlightsCard">
+      <h2>Highlights Recap · clip markers</h2>
+      <div id="highlights"><div class="empty">No highlights yet — they capture automatically when hype spikes.</div></div>
+    </div>
+  </div>
+
+  <div class="col" id="chatCol">
+    <div class="card" id="chatCard">
+      <h2>Chat · mock replay (mirrors KICK webhook payloads)</h2>
+      <div class="feed" id="chat"></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" id="assistCard">
+      <h2>Assistant · suggestions, flags &amp; Hit Me, Kick Me impact</h2>
+      <div class="feed" id="assist"></div>
+    </div>
+  </div>
+</main>
+
+<aside id="predictionPopup" aria-label="Prediction" hidden></aside>
+<aside id="actionBetPopup" aria-label="Bet action" hidden></aside>
+
+<script type="module">
+import { HypeEngine } from '../src/engine.js';
+import { TopicTracker } from '../src/topics.js';
+import { KickAssistant } from '../src/assistant.js';
+import { TrendingTopics } from '../src/trending.js';
+import { HighlightTracker } from '../src/highlights.js';
+import { createScriptedReplay } from '../src/mock.js';
+import { Prediction } from '../src/prediction.js';
+import { ActionBet } from '../src/action-bet.js';
+
+const $ = (id) => document.getElementById(id);
+const fmtClock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+
+// ---- source mode ----
+// Default: deterministic scripted replay (stage insurance).
+// ?source=live[&sse=<url>][&channel=<broadcaster_user_id>] feeds REAL events
+// from a kick-hype-starter SSE stream instead. No chat pane in live mode —
+// meter, topics, highlights and assistant feed only.
+const params = new URLSearchParams(location.search);
+const LIVE = params.get('source') === 'live';
+const DEFAULT_SSE = 'https://kick-hype-starter-production.up.railway.app/api/events/stream';
+// The deployment sends no CORS headers, so when the demo is served by our
+// serve.js (port 8420) we default to its same-origin /sse-proxy, which pipes
+// the same deployed stream. Anywhere else, hit the deployment directly.
+const SSE_URL = params.get('sse') || (location.port === '8420' ? '/sse-proxy' : DEFAULT_SSE);
+const CHANNEL = params.get('channel') ? Number(params.get('channel')) : null;
+
+let engine, topics, assistant, highlights, events, ei, simNow, playing = true, speed = 1;
+let displayHype = 0, targetState = null, lastSampleAt = 0;
+let es = null, liveT0 = 0;
+
+// ---- prediction popup ----
+let prediction = null;
+let predictionStake = 50;
+let simulatedVoter = 0;
+let predictionRenderTimer = null;
+let predictionVoteTimer = null;
+let predictionSettlement = null;
+let predictionAnnouncementSent = false;
+let predictionCelebrationTimer = null;
+let actionBetView = 'viewer';
+let actionBet = null;
+let actionBackingStake = 50;
+let actionBalance = 1250;
+let actionModifying = false;
+let simulatedBacker = 0;
+let actionRenderTimer = null;
+let actionBackingTimer = null;
+const predictionColors = ['#53fc18', '#ff6565'];
+const pointsFormat = new Intl.NumberFormat('en-US');
+const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+})[char]);
+
+function remainingLabel(ms) {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
+}
+
+function openPrediction() {
+  closeActionBet();
+  const now = Date.now();
+  prediction = new Prediction({
+    question: 'Will Neon hit 13,000 trophies this stream?',
+    opensAt: now,
+    locksAt: now + 10_000,
+  }, now);
+  predictionStake = 50;
+  simulatedVoter = 0;
+  predictionSettlement = null;
+  predictionAnnouncementSent = false;
+  clearTimeout(predictionCelebrationTimer);
+  $('predictionCelebration').hidden = true;
+  $('predictionCelebration').innerHTML = '';
+  $('predictionPopup').hidden = false;
+  renderPrediction();
+  clearInterval(predictionRenderTimer);
+  clearInterval(predictionVoteTimer);
+  predictionRenderTimer = setInterval(renderPrediction, 250);
+  predictionVoteTimer = setInterval(() => {
+    const voteNow = Date.now();
+    if (!prediction || prediction.status(voteNow) !== 'open' || Math.random() > 0.9) return;
+    const option = prediction.options[Math.floor(Math.random() * prediction.options.length)];
+    const amount = [25, 50, 100][Math.floor(Math.random() * 3)];
+    prediction.vote(option.id, { voterId: `sim-${++simulatedVoter}`, points: amount, now: voteNow });
+    renderPrediction();
+  }, 500);
+}
+
+function closePrediction() {
+  clearInterval(predictionRenderTimer);
+  clearInterval(predictionVoteTimer);
+  predictionRenderTimer = null;
+  predictionVoteTimer = null;
+  prediction = null;
+  predictionSettlement = null;
+  predictionAnnouncementSent = false;
+  $('predictionPopup').hidden = true;
+  $('predictionPopup').innerHTML = '';
+}
+
+function renderPrediction() {
+  if (!prediction) return;
+  if (document.activeElement?.id === 'predictionStake') return;
+  const now = Date.now();
+  const snapshot = prediction.snapshot(now);
+  const duration = Math.max(1, prediction.locksAt - prediction.opensAt);
+  const remaining = Math.max(0, prediction.locksAt - now);
+  const remainingPercent = Math.min(100, (remaining / duration) * 100);
+  const maxPoints = Math.max(...snapshot.options.map((option) => option.points));
+  const visibleOptions = snapshot.status === 'locked'
+    ? snapshot.options.filter((option) => option.points === maxPoints)
+    : snapshot.options;
+  if (snapshot.status === 'locked' && !predictionSettlement) {
+    predictionSettlement = prediction.settle(now);
+  }
+  if (predictionSettlement && !predictionAnnouncementSent) {
+    predictionAnnouncementSent = true;
+    announcePredictionSettlement(predictionSettlement);
+  }
+
+  $('predictionPopup').innerHTML = `<section class="pred-card">
+    <div class="pred-heading">
+      <h3 class="pred-question">🏆 ${escapeHtml(prediction.question)}</h3>
+      <span class="pred-heading-actions"><span class="pred-status ${snapshot.status}">${snapshot.status === 'locked' ? 'Result' : `Locks in ${remainingLabel(remaining)}`}</span><button class="pred-close" data-pred-action="close" aria-label="Close prediction">×</button></span>
+    </div>
+    <div class="pred-time"><span>Voting time</span><strong>${snapshot.status === 'locked' ? 'Voting locked' : `${remainingLabel(remaining)} remaining`}</strong></div>
+    <div class="pred-progress" role="progressbar" aria-label="Voting time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(remainingPercent)}"><div style="width:${remainingPercent}%"></div></div>
+    ${snapshot.status === 'open' ? `<label class="pred-stake"><span>Points per vote</span>${[25, 50, 100].map((amount) => `<button type="button" class="pred-chip ${predictionStake === amount ? 'active' : ''}" data-stake="${amount}">${amount}</button>`).join('')}<input id="predictionStake" class="pred-input" type="number" min="1" step="10" value="${predictionStake}" aria-label="Custom stake"></label>` : `<p class="pred-readonly">Final result</p>`}
+    <div class="pred-options">${visibleOptions.map((option) => {
+      const optionIndex = snapshot.options.findIndex((candidate) => candidate.id === option.id);
+      const viewerPoints = prediction.viewerPoints(option.id);
+      const color = predictionColors[optionIndex % predictionColors.length];
+      return `<div class="pred-option ${snapshot.status === 'locked' ? 'winner' : ''}" style="--option:${color};--share:${option.percentage}%">
+        <div class="pred-fill"></div>
+        <div class="pred-option-content">
+          <span class="pred-option-name">${escapeHtml(option.label)}</span>
+          <span class="pred-points">${pointsFormat.format(option.points)} pts${viewerPoints ? ` · yours ${pointsFormat.format(viewerPoints)}` : ''}</span>
+          <span class="pred-percent">${option.percentage}%</span>
+          ${snapshot.status === 'open' ? `<span class="pred-actions"><button class="pred-action" data-vote-action="remove" data-option="${optionIndex}" ${viewerPoints ? '' : 'disabled'}>−</button><button class="pred-action" data-vote-action="add" data-option="${optionIndex}">+</button></span>` : ''}
+        </div>
+      </div>`;
+    }).join('')}</div>
+    <footer class="pred-footer"><span>Total pool <strong>${pointsFormat.format(snapshot.totalPoints)} HP</strong></span><span>Participants <strong>${pointsFormat.format(snapshot.participantCount)}</strong></span></footer>
+  </section>`;
+
+}
+
+function announcePredictionSettlement(settlement) {
+  const labels = settlement.winners.map((option) => option.label).join(' & ');
+  const viewerWin = settlement.winningViewers.find((viewer) => viewer.viewerId === 'demo-viewer');
+  const count = settlement.winningViewers.length;
+  const title = viewerWin ? 'Congratulations—you won!' : `${escapeHtml(labels)} ${settlement.isTie ? 'tie' : 'wins'}!`;
+  const message = viewerWin
+    ? `${escapeHtml(labels)} ${settlement.isTie ? 'finished tied' : 'won'}. Your winning stake was ${pointsFormat.format(viewerWin.points)} points.`
+    : `Congratulations to ${pointsFormat.format(count)} winning viewer${count === 1 ? '' : 's'}.`;
+  showPredictionCelebration(title, message);
+}
+
+function showPredictionCelebration(title, message) {
+  const colors = ['#53fc18', '#ffb020', '#ff6565', '#4dd2ff', '#f2f5f0'];
+  const ribbons = Array.from({ length: 54 }, (_, index) => {
+    const x = Math.round(Math.random() * 100);
+    const drift = `${Math.round(Math.random() * 180 - 90)}px`;
+    const spin = `${Math.round(400 + Math.random() * 900)}deg`;
+    const duration = `${(1.45 + Math.random() * .75).toFixed(2)}s`;
+    const delay = `${(Math.random() * .45).toFixed(2)}s`;
+    return `<i class="celebration-ribbon" style="--x:${x}%;--drift:${drift};--spin:${spin};--duration:${duration};--delay:${delay};--ribbon:${colors[index % colors.length]}"></i>`;
+  }).join('');
+  $('predictionCelebration').innerHTML = `<div class="celebration-rays"></div>${ribbons}<div class="celebration-message"><span>Prediction settled</span><strong>${title}</strong><small>${message}</small></div>`;
+  $('predictionCelebration').hidden = false;
+  clearTimeout(predictionCelebrationTimer);
+  predictionCelebrationTimer = setTimeout(() => {
+    $('predictionCelebration').hidden = true;
+    $('predictionCelebration').innerHTML = '';
+  }, 2300);
+}
+
+function renderActionBet() {
+  if ($('actionBetPopup').hidden) return;
+  if (['actionBackStake', 'actionModifyIdea'].includes(document.activeElement?.id)) return;
+  const now = Date.now();
+  const snapshot = actionBet?.snapshot(now);
+  const remaining = snapshot ? Math.max(0, snapshot.locksAt - now) : 0;
+  const duration = snapshot ? Math.max(1, snapshot.locksAt - snapshot.opensAt) : 1;
+  const remainingPercent = snapshot ? Math.min(100, (remaining / duration) * 100) : 0;
+  const phaseLabel = !snapshot ? 'Proposal phase' : {
+    backing: 'Backing phase', review: 'Streamer review', accepted: 'Accepted', rejected: 'Rejected',
+  }[snapshot.status];
+
+  $('actionBetPopup').innerHTML = `<section class="action-card">
+    <div class="action-toolbar">
+      <button class="action-tab ${actionBetView === 'viewer' ? 'active' : ''}" data-action-view="viewer">Viewer view</button>
+      <button class="action-tab ${actionBetView === 'streamer' ? 'active' : ''}" data-action-view="streamer">Streamer view</button>
+      <span class="action-balance">Balance: <strong>${pointsFormat.format(actionBalance)}</strong> Hype Points</span>
+      <button class="action-close" data-action-close aria-label="Close action bets">×</button>
+    </div>
+    <div class="action-title-row"><h3 class="action-title">${actionBetView === 'viewer' ? (snapshot ? 'Back this viewer challenge' : 'Propose something for the streamer') : 'Review viewer proposals'}</h3><span class="action-phase">${phaseLabel}</span></div>
+    <p class="action-copy">${actionBetView === 'viewer' ? 'Viewers can support safe, harmless challenges using Hype Points.' : 'Accept, reject, or revise a challenge after backing closes.'}</p>
+    ${!snapshot && actionBetView === 'viewer' ? `<form id="actionBetForm">
+      <div class="action-fields">
+        <label class="action-field">Challenge idea<input id="actionIdea" maxlength="120" value="Play the next round using a random character" required></label>
+        <label class="action-field">Category<select id="actionCategory"><option>Performance</option><option>Gameplay</option><option>Community</option></select></label>
+      </div>
+      <button class="action-submit" type="submit">Submit proposal</button>
+    </form>` : !snapshot ? `<div class="action-streamer-note">No proposals are waiting yet. Viewer submissions will appear here for approval.</div>` : `
+      <div class="action-proposal"><span class="action-category">${escapeHtml(snapshot.category)}</span><h4>${escapeHtml(snapshot.idea)}</h4></div>
+      ${snapshot.status === 'backing' || snapshot.status === 'review' ? `<div class="action-time"><span>${snapshot.status === 'backing' ? 'Viewer backing' : 'Backing closed'}</span><strong>${snapshot.status === 'backing' ? `${remainingLabel(remaining)} remaining` : 'Ready for review'}</strong></div><div class="action-progress" role="progressbar" aria-label="Backing time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(remainingPercent)}"><div style="width:${remainingPercent}%"></div></div>` : ''}
+      <div class="action-stats"><span>Backed <strong>${pointsFormat.format(snapshot.totalPoints)} HP</strong></span><span>Backers <strong>${pointsFormat.format(snapshot.backerCount)}</strong></span></div>
+      ${actionBetView === 'viewer' ? renderViewerAction(snapshot) : renderStreamerAction(snapshot)}
+    `}
+  </section>`;
+}
+
+function renderViewerAction(snapshot) {
+  if (snapshot.status === 'backing') return `<div class="action-backing"><span>Back with</span>${[25, 50, 100].map((amount) => `<button class="pred-chip ${actionBackingStake === amount ? 'active' : ''}" data-backing-stake="${amount}">${amount}</button>`).join('')}<input id="actionBackStake" class="action-back-input" type="number" min="1" step="10" value="${actionBackingStake}" aria-label="Backing points"><button class="action-back-button" data-action-command="back" ${actionBalance >= actionBackingStake ? '' : 'disabled'}>Back proposal</button></div>`;
+  if (snapshot.status === 'review') return `<div class="action-streamer-note">Backing has closed. The proposal is waiting for the streamer’s decision.</div>`;
+  return `<div class="action-result ${snapshot.status}">${snapshot.status}</div><button class="action-submit" data-action-command="new">Propose another</button>`;
+}
+
+function renderStreamerAction(snapshot) {
+  if (snapshot.status === 'backing') return `<div class="action-streamer-note">Viewer backing is still open for ${remainingLabel(snapshot.locksAt - Date.now())}. Review controls unlock when the minute ends.</div>`;
+  if (snapshot.status === 'accepted' || snapshot.status === 'rejected') return `<div class="action-result ${snapshot.status}">${snapshot.status}</div>`;
+  if (actionModifying) return `<form id="actionModifyForm" class="action-modify-form"><input id="actionModifyIdea" maxlength="120" value="${escapeHtml(snapshot.idea)}" required><span class="action-modify-note">Saving a change resets backing and gives viewers one new minute.</span><span><button class="action-modify" type="submit">Save &amp; reopen backing</button> <button type="button" data-action-command="cancel-modify">Cancel</button></span></form>`;
+  return `<div class="action-review-actions"><button class="action-accept" data-action-command="accept">Accept challenge</button><button class="action-reject" data-action-command="reject">Reject</button><button class="action-modify" data-action-command="modify">Propose modification</button></div>`;
+}
+
+function startActionTimers() {
+  clearInterval(actionRenderTimer);
+  clearInterval(actionBackingTimer);
+  actionRenderTimer = setInterval(renderActionBet, 250);
+  actionBackingTimer = setInterval(() => {
+    const now = Date.now();
+    if (!actionBet || actionBet.status(now) !== 'backing' || Math.random() > 0.88) return;
+    const points = [25, 50, 100][Math.floor(Math.random() * 3)];
+    actionBet.back({ viewerId: `action-backer-${++simulatedBacker}`, points, now });
+    renderActionBet();
+  }, 650);
+}
+
+function openActionBet() {
+  closePrediction();
+  actionBetView = 'viewer';
+  $('actionBetPopup').hidden = false;
+  renderActionBet();
+}
+
+function closeActionBet() {
+  $('actionBetPopup').hidden = true;
+  $('actionBetPopup').innerHTML = '';
+}
+
+function toast(cls, html, when) {
+  const el = document.createElement('div');
+  el.className = `toast ${cls}`;
+  el.innerHTML = `${html}<div class="when">at ${fmtClock(when)}</div>`;
+  $('assist').prepend(el);
+}
+
+function boot() {
+  engine = new HypeEngine();
+  topics = new TopicTracker();
+  assistant = new KickAssistant(engine, topics, { trending: new TrendingTopics() });
+  highlights = new HighlightTracker({ topics });
+  events = LIVE ? [] : createScriptedReplay();
+  ei = 0; simNow = 0; displayHype = 0; targetState = null; lastSampleAt = -1000;
+  $('assist').innerHTML = '';
+  $('highlights').innerHTML = '<div class="empty">No highlights yet — they capture automatically when hype spikes.</div>';
+  $('readyBadge').className = ''; $('readyBadge').textContent = 'CALIBRATING BASELINE…';
+
+  assistant.on('ready', (p) => {
+    $('readyBadge').className = 'open';
+    $('readyBadge').textContent = 'BASELINE LOCKED — HIT ME, KICK ME OPEN';
+    toast('', `<b>Baseline locked.</b> "Hit Me, Kick Me" can open.`, p.ts);
+  });
+  assistant.on('suggestion', (p) => p.kind === 'trending'
+    ? toast('trending', `<b>Trending gap:</b> ${p.text}`, p.ts)
+    : toast('', `<b>Suggestion:</b> ${p.text}`, p.ts));
+  assistant.on('impact', (p) => {
+    const label = { up: 'HYPE UP', flat: 'FLAT', down: 'HYPE DOWN' }[p.verdict];
+    toast(`impact-${p.verdict}`, `<b>Hit Me, Kick Me result — ${label}</b> · "${p.label}" moved hype ${p.preHype}→${p.postHype} (Δ${p.delta >= 0 ? '+' : ''}${p.delta})`, p.ts);
+  });
+  highlights.on('highlight', (h) => {
+    addHighlight(h);
+    const range = `${fmtClock(h.startTs)}–${fmtClock(h.endTs)}`;
+    toast('clip', `<b>Clip captured:</b> ${range} · peak ${h.peakHype}${h.topTopic ? ` · ${h.topTopic}` : ''}`, h.endTs);
+  });
+
+  if (LIVE) connectLive();
+}
+
+// ---- live mode: real KICK events over SSE ----
+// Maps kick-hype-starter SSE messages ({ id, type, receivedAt, payload }
+// where payload is the raw KICK webhook payload) into the engine's event
+// shape. Same mapping as test/live-replay.js. Events are clocked on arrival
+// (one consistent local clock — no webhook/browser clock-skew headaches).
+function mapKickEvent(msg) {
+  const p = msg.payload || {};
+  const kind = String(msg.type || '').replace(/^fake:/, '');
+  const base = { id: msg.id, broadcaster: p.broadcaster?.user_id ?? null };
+  switch (kind) {
+    case 'chat.message.sent': {
+      const s = p.sender || {};
+      return { ...base, id: p.message_id || msg.id, type: 'chat',
+        userId: String(s.user_id ?? 'anonymous'), username: s.username || 'Anonymous',
+        badges: (s.identity?.badges || []).map((b) => b.type), text: p.content || '' };
+    }
+    case 'kicks.gifted': {
+      const g = p.gifter || {};
+      return { ...base, type: 'kicks', userId: String(g.user_id ?? 'anonymous'),
+        username: g.username || 'Anonymous', badges: [], raw: p.gift?.amount || 1 };
+    }
+    case 'channel.subscription.new':
+    case 'channel.subscription.renewal': {
+      const s = p.subscriber || {};
+      return { ...base, type: 'sub', userId: String(s.user_id ?? 'anonymous'),
+        username: s.username || 'Anonymous', badges: [], raw: 1 };
+    }
+    case 'channel.subscription.gifts': {
+      const g = p.gifter || {};
+      const n = Array.isArray(p.giftees) ? p.giftees.length : 1;
+      return { ...base, type: 'sub', userId: String(g.user_id ?? 'anonymous'),
+        username: g.username || 'Anonymous', badges: [], raw: Math.max(1, n) };
+    }
+    case 'channel.followed': {
+      const f = p.follower || {};
+      return { ...base, type: 'follow', userId: String(f.user_id ?? 'anonymous'),
+        username: f.username || 'Anonymous', badges: [] };
+    }
+    default:
+      return null; // assistant.*, livestream.status.updated, unknown types
+  }
+}
+
+function connectLive() {
+  es?.close();
+  liveT0 = Date.now();
+  const badge = $('srcBadge');
+  badge.className = 'live-off';
+  badge.textContent = 'LIVE · connecting…';
+  es = new EventSource(SSE_URL);
+  es.onopen = () => { badge.className = 'live-on'; badge.textContent = `LIVE · ${new URL(SSE_URL, location.href).host}`; };
+  es.onerror = () => { badge.className = 'live-off'; badge.textContent = 'LIVE · reconnecting…'; };
+  es.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    const ev = mapKickEvent(msg);
+    if (!ev) return;
+    if (CHANNEL != null && ev.broadcaster !== CHANNEL) return;
+    ev.ts = Date.now() - liveT0;
+    const w = engine.ingest(ev);
+    const flagged = engine.isFlagged(ev.userId);
+    if (!flagged) topics.ingest(ev, w);
+    if (flagged && ev.userId !== lastFlagToasted) {
+      lastFlagToasted = ev.userId;
+      toast('flag', `<b>Spam shield:</b> flagged <b>${ev.username}</b> — excluded from hype &amp; topics`, ev.ts);
+    }
+    highlights.onEvent(ev, w);
+    // No chat rendering in live mode — the chat column is hidden by design.
+  };
+}
+
+function addHighlight(h) {
+  const feed = $('highlights');
+  feed.querySelector('.empty')?.remove();
+  const el = document.createElement('div');
+  el.className = 'hl';
+  el.innerHTML = `
+    <span class="range">${fmtClock(h.startTs)}–${fmtClock(h.endTs)}</span>
+    <span class="head">${h.headline}</span>
+    <span class="peak">peak ${h.peakHype}</span>
+    <span class="topic">${h.topTopic || ''}</span>`;
+  feed.appendChild(el);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function step(dtMs) {
+  if (LIVE) {
+    // Live events ingest on SSE arrival; the loop only advances the shared
+    // clock (same one the arrival handler stamps events with) and samples.
+    simNow = Date.now() - liveT0;
+  } else {
+    simNow += dtMs;
+    while (ei < events.length && events[ei].ts <= simNow) {
+      const ev = events[ei++];
+      const w = engine.ingest(ev);
+      const flagged = engine.isFlagged(ev.userId);
+      if (!flagged) topics.ingest(ev, w);
+      if (flagged && ev.userId !== lastFlagToasted) {
+        lastFlagToasted = ev.userId;
+        toast('flag', `<b>Spam shield:</b> flagged <b>${ev.username}</b> — excluded from hype &amp; topics`, ev.ts);
+      }
+      highlights.onEvent(ev, w);
+      renderChatLine(ev, flagged);
+    }
+  }
+  if (simNow - lastSampleAt >= 250) {
+    lastSampleAt = simNow;
+    targetState = engine.sample(simNow);
+    assistant.onSample(targetState, simNow);
+    highlights.onSample(targetState, simNow);
+    renderTopics();
+  }
+}
+let lastFlagToasted = null;
+
+function renderTopics() {
+  const rows = topics.top(6, simNow);
+  const max = rows[0]?.score || 1;
+  const arrows = { rising: '▲', steady: '▶', falling: '▼' };
+  $('topics').innerHTML = rows.map((t, i) => `
+    <div class="topic">
+      <span style="color:var(--muted)">${i + 1}</span>
+      <b>${t.topic}</b>
+      <div class="bar"><div style="width:${Math.round((t.score / max) * 100)}%"></div></div>
+      <span class="t-${t.trend}">${arrows[t.trend]}</span>
+    </div>`).join('');
+}
+
+function render() {
+  if (targetState) {
+    // Interpolate the meter toward the target — smooth reads as "live".
+    displayHype += (targetState.hype - displayHype) * 0.08;
+    const h = Math.round(displayHype);
+    $('hypeNum').innerHTML = `${h}<small>/100</small>`;
+    $('meterFill').style.height = `${h}%`;
+    $('meterFill').style.background = h > 66
+      ? 'linear-gradient(0deg,#1f7a12,var(--green))'
+      : h > 33 ? 'linear-gradient(0deg,#7a6a12,var(--amber))'
+      : 'linear-gradient(0deg,#5a1f1f,#c05050)';
+    $('meterBar').classList.toggle('flash', h >= 90 && h < 100);
+    $('meterBar').classList.toggle('crazy', h >= 100);
+    $('trend').textContent = { rising: '▲ rising', steady: '▶ steady', falling: '▼ falling' }[targetState.trend];
+    $('trend').style.color = targetState.trend === 'rising' ? 'var(--green)' : targetState.trend === 'falling' ? 'var(--red)' : 'var(--muted)';
+    $('rawV').textContent = targetState.raw.toFixed(1);
+    $('baseV').textContent = targetState.baseline.toFixed(1);
+    $('zV').textContent = targetState.z.toFixed(2);
+  }
+  $('clock').textContent = fmtClock(simNow);
+}
+
+// ---- injected events (interactivity for judges) ----
+let injectId = 1;
+function injectBurst() {
+  const lines = ['LETS GOOO', 'NO WAY', 'CLIP IT', 'W W W', 'HE DID IT', 'INSANE [emote:1730752:KEKW]'];
+  const add = [];
+  for (let i = 0; i < 40; i++) {
+    const username = `viewer_${Math.floor(Math.random() * 300)}`;
+    add.push({ id: `inj${injectId++}`, type: 'chat', userId: username, username, badges: [],
+      text: lines[Math.floor(Math.random() * lines.length)], ts: simNow + 100 + Math.random() * 5000 });
+  }
+  spliceEvents(add);
+}
+function injectSpammer() {
+  const add = [];
+  for (let i = 0; i < 30; i++) {
+    add.push({ id: `inj${injectId++}`, type: 'chat', userId: 'spam_bot_777', username: 'spam_bot_777', badges: [],
+      text: 'BUY CHEAP FOLLOWERS NOW', ts: simNow + 100 + i * 200 });
+  }
+  spliceEvents(add);
+}
+function spliceEvents(add) {
+  events = events.concat(add).sort((a, b) => a.ts - b.ts);
+  ei = events.findIndex((e) => e.ts > simNow);
+  if (ei < 0) ei = events.length;
+}
+
+$('playBtn').onclick = () => { playing = !playing; $('playBtn').textContent = playing ? 'Pause' : 'Play'; };
+$('speedBtn').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; $('speedBtn').textContent = `Speed ${speed}×`; };
+$('restartBtn').onclick = () => boot();
+$('predictionBtn').onclick = () => prediction ? closePrediction() : openPrediction();
+$('actionBetBtn').onclick = () => $('actionBetPopup').hidden ? openActionBet() : closeActionBet();
+$('predictionPopup').addEventListener('click', (event) => {
+  const close = event.target.closest('[data-pred-action="close"]');
+  if (close) { closePrediction(); return; }
+
+  const stake = event.target.closest('[data-stake]');
+  if (stake) { predictionStake = Number(stake.dataset.stake); renderPrediction(); return; }
+
+  const vote = event.target.closest('[data-vote-action]');
+  if (!vote || !prediction) return;
+  const option = prediction.options[Number(vote.dataset.option)];
+  if (!option) return;
+  const result = prediction.vote(option.id, { points: predictionStake, action: vote.dataset.voteAction });
+  renderPrediction();
+});
+$('predictionPopup').addEventListener('input', (event) => {
+  if (event.target.id !== 'predictionStake') return;
+  predictionStake = Math.max(1, Math.round(Number(event.target.value) || 1));
+});
+$('actionBetPopup').addEventListener('click', (event) => {
+  if (event.target.closest('[data-action-close]')) { closeActionBet(); return; }
+  const view = event.target.closest('[data-action-view]');
+  if (view) { actionBetView = view.dataset.actionView; renderActionBet(); }
+  const stake = event.target.closest('[data-backing-stake]');
+  if (stake) { actionBackingStake = Number(stake.dataset.backingStake); renderActionBet(); return; }
+  const command = event.target.closest('[data-action-command]')?.dataset.actionCommand;
+  if (!command || !actionBet) return;
+  const now = Date.now();
+  if (command === 'back') {
+    const result = actionBet.back({ viewerId: 'demo-viewer', points: actionBackingStake, now });
+    if (result.changed) actionBalance -= result.points;
+  } else if (command === 'accept' && actionBet.accept(now)) {
+    toast('', `<b>Action accepted:</b> ${escapeHtml(actionBet.idea)}`, simNow);
+  } else if (command === 'reject' && actionBet.reject(now)) {
+    toast('flag', `<b>Action rejected:</b> ${escapeHtml(actionBet.idea)}`, simNow);
+  } else if (command === 'modify') {
+    actionModifying = true;
+  } else if (command === 'cancel-modify') {
+    actionModifying = false;
+  } else if (command === 'new') {
+    actionBet = null;
+    actionModifying = false;
+    clearInterval(actionRenderTimer);
+    clearInterval(actionBackingTimer);
+  }
+  renderActionBet();
+});
+$('actionBetPopup').addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (event.target.id === 'actionBetForm') {
+    const idea = $('actionIdea')?.value.trim();
+    const category = $('actionCategory')?.value;
+    if (!idea) return;
+    const now = Date.now();
+    actionBet = new ActionBet({ idea, category, opensAt: now, locksAt: now + 60_000 }, now);
+    actionBackingStake = 50;
+    simulatedBacker = 0;
+    toast('', `<b>Action proposed:</b> ${escapeHtml(idea)} · ${escapeHtml(category)}`, simNow);
+    startActionTimers();
+    renderActionBet();
+    return;
+  }
+  if (event.target.id === 'actionModifyForm' && actionBet) {
+    const idea = $('actionModifyIdea')?.value.trim();
+    if (!idea) return;
+    actionBalance += actionBet.backers.get('demo-viewer') ?? 0;
+    actionBet.modify(idea, { now: Date.now() });
+    actionModifying = false;
+    simulatedBacker = 0;
+    toast('trending', `<b>Streamer proposed a revision:</b> ${escapeHtml(idea)} · backing reopened`, simNow);
+    startActionTimers();
+    renderActionBet();
+  }
+});
+$('actionBetPopup').addEventListener('input', (event) => {
+  if (event.target.id !== 'actionBackStake') return;
+  actionBackingStake = Math.max(1, Math.round(Number(event.target.value) || 1));
+});
+$('burstBtn').onclick = () => injectBurst();
+$('spamBtn').onclick = () => injectSpammer();
+$('dareBtn').onclick = () => {
+  assistant.trackAction('viewer dare', simNow);
+  toast('', `<b>Hit Me, Kick Me started</b> — measuring hype impact for 15s…`, simNow);
+  if (!LIVE) setTimeout(() => injectBurst(), 1500 / speed); // mocked chat reaction; live mode measures the real one
+};
+
+if (LIVE) document.body.classList.add('live');
+boot();
+let lastFrame = performance.now();
+(function loop(t) {
+  const dt = Math.min(100, t - lastFrame);
+  lastFrame = t;
+  if (playing) step(dt * speed);
+  render();
+  requestAnimationFrame(loop);
+})(performance.now());
+</script>
+</body>
+</html>

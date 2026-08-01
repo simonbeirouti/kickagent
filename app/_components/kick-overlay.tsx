@@ -10,6 +10,7 @@ import {
   GaugeIcon,
   GlassesIcon,
   GripVerticalIcon,
+  HandshakeIcon,
   LogOutIcon,
   MessageCircleIcon,
   MonitorUpIcon,
@@ -18,12 +19,14 @@ import {
   SmilePlusIcon,
   SparklesIcon,
   TargetIcon,
+  TrophyIcon,
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
+  ActionBetWidget,
   AlertsWidget,
   BattleWidget,
   BossWidget,
@@ -32,6 +35,7 @@ import {
   JarWidget,
   LeaderboardWidget,
   PulseWidget,
+  PredictionWidget,
   WidgetHeader,
 } from "@/app/_components/overlay-widgets";
 import { useLiveOverlayState } from "@/lib/live-overlay-store";
@@ -69,6 +73,7 @@ const MANAGED_SCREENS: readonly {
 ];
 
 const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
+  actionBet: "Action bet",
   alerts: "Alerts",
   battle: "Hype battle",
   boss: "Stream boss",
@@ -78,6 +83,7 @@ const WIDGET_LABELS: Readonly<Record<WidgetKind, string>> = {
   hype: "Agent energy",
   jar: "Support jar",
   leaderboard: "Top supporters",
+  prediction: "Prediction",
   pulse: "Chat pulse",
   suggestion: "Live brief",
 };
@@ -87,6 +93,7 @@ const WIDGET_GROUPS: readonly {
   readonly label: string;
 }[] = [
   { kinds: ["suggestion", "chat", "hype"], label: "Agent" },
+  { kinds: ["prediction", "actionBet"], label: "Interactive" },
   { kinds: ["goals", "leaderboard", "jar", "alerts"], label: "Community" },
   { kinds: ["battle", "boss", "emotes", "pulse"], label: "Hype & fun" },
 ];
@@ -448,6 +455,8 @@ function WidgetContent({
   readonly kind: WidgetKind;
   readonly state: OverlayState;
 }) {
+  if (kind === "prediction") return <PredictionWidget state={state} />;
+  if (kind === "actionBet") return <ActionBetWidget state={state} />;
   if (kind === "goals") return <GoalsWidget state={state} />;
   if (kind === "leaderboard") return <LeaderboardWidget state={state} />;
   if (kind === "battle") return <BattleWidget state={state} />;
@@ -496,6 +505,7 @@ function WidgetContent({
 }
 
 const WIDGET_ICONS: Readonly<Record<WidgetKind, typeof SparklesIcon>> = {
+  actionBet: HandshakeIcon,
   alerts: BellRingIcon,
   battle: FlameIcon,
   boss: SkullIcon,
@@ -505,6 +515,7 @@ const WIDGET_ICONS: Readonly<Record<WidgetKind, typeof SparklesIcon>> = {
   hype: ActivityIcon,
   jar: CoinsIcon,
   leaderboard: CrownIcon,
+  prediction: TrophyIcon,
   pulse: GaugeIcon,
   suggestion: SparklesIcon,
 };

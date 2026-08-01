@@ -3028,6 +3028,244 @@ textarea {
   text-align: center;
 }
 
+/* Prediction and action bet */
+
+.canvas-widget .interaction-status {
+  padding: 0.3em 0.65em;
+  border: 1px solid rgb(83 252 24 / 30%);
+  border-radius: 999px;
+  background: rgb(83 252 24 / 7%);
+  color: #8cff66;
+  font-size: clamp(0.34rem, 2cqw, 0.66rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.canvas-widget .interaction-status.locked,
+.canvas-widget .interaction-status.settled,
+.canvas-widget .interaction-status.review {
+  border-color: rgb(255 210 62 / 35%);
+  background: rgb(255 210 62 / 8%);
+  color: #ffe27a;
+}
+
+.canvas-widget .interaction-status.accepted {
+  border-color: rgb(83 252 24 / 48%);
+  color: #b5ff9c;
+}
+
+.canvas-widget .interaction-status.rejected {
+  border-color: rgb(255 101 101 / 35%);
+  background: rgb(255 101 101 / 7%);
+  color: #ff9b9b;
+}
+
+.canvas-widget .prediction-widget-content,
+.canvas-widget .action-bet-widget-content {
+  display: flex;
+  min-height: 0;
+  padding: 2% 5% 3%;
+  flex: 1;
+  flex-direction: column;
+}
+
+.canvas-widget .prediction-widget-question {
+  overflow: hidden;
+  margin: 0 0 0.45em;
+  color: #f0f4f0;
+  font-size: clamp(0.52rem, 3.5cqw, 1.15rem);
+  font-weight: 730;
+  line-height: 1.22;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-widget .interaction-time-track {
+  height: clamp(0.18rem, 2.2cqh, 0.38rem);
+  overflow: hidden;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 7%);
+}
+
+.canvas-widget .interaction-time-track > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #239f12, #53fc18);
+  transition: width 0.5s linear;
+}
+
+.canvas-widget .prediction-widget-options {
+  display: grid;
+  min-height: 0;
+  margin-top: 3%;
+  flex: 1;
+  gap: 5%;
+  align-content: center;
+}
+
+.canvas-widget .prediction-widget-option {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--option-accent) 42%, transparent);
+  border-radius: 0.55em;
+  background: rgb(7 10 8 / 58%);
+  transition: border-color 180ms ease, opacity 180ms ease;
+}
+
+.canvas-widget .prediction-widget-option > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--option-accent) 20%, transparent);
+  transition: width 0.5s ease-out;
+}
+
+.canvas-widget .prediction-widget-option.winner {
+  border-color: var(--option-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--option-accent) 25%, transparent);
+}
+
+.canvas-widget .prediction-widget-option.muted {
+  opacity: 0.42;
+}
+
+.canvas-widget .prediction-option-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  height: 100%;
+  min-height: clamp(1.15rem, 12cqh, 2.5rem);
+  padding: 0 4%;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.7em;
+  align-items: center;
+  color: #a9b1aa;
+  font-size: clamp(0.38rem, 2.5cqw, 0.76rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-widget .prediction-option-copy strong {
+  overflow: hidden;
+  color: var(--option-accent);
+  font-size: 1.2em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.canvas-widget .prediction-option-copy b {
+  color: var(--option-accent);
+  font-size: 1.25em;
+}
+
+.canvas-widget .interaction-widget-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.canvas-widget .interaction-widget-footer strong {
+  color: #dce2dd;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-widget .action-bet-widget-content {
+  gap: 6%;
+  justify-content: center;
+}
+
+.canvas-widget .action-bet-category {
+  width: fit-content;
+  padding: 0.25em 0.65em;
+  border: 1px solid rgb(103 169 255 / 28%);
+  border-radius: 999px;
+  background: rgb(103 169 255 / 8%);
+  color: #9bc7ff;
+  font-size: clamp(0.34rem, 2cqw, 0.66rem);
+  font-weight: 700;
+}
+
+.canvas-widget .action-bet-widget-content p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #edf2ee;
+  font-size: clamp(0.55rem, 4cqw, 1.25rem);
+  font-weight: 700;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.canvas-widget .action-bet-time-track > i {
+  background: linear-gradient(90deg, #236bc4, #67a9ff);
+}
+
+.canvas-widget .action-bet-canvas-widget.status-accepted {
+  box-shadow: inset 0 0 0 1px rgb(83 252 24 / 18%);
+}
+
+.canvas-widget .action-bet-canvas-widget.status-rejected {
+  opacity: 0.72;
+}
+
+.widget-review-shell {
+  min-height: 100vh;
+  padding: clamp(1rem, 4vw, 4rem);
+  background:
+    radial-gradient(circle at 75% 0%, rgb(83 252 24 / 9%), transparent 32rem),
+    #080b09;
+  color: #edf2ee;
+}
+
+.widget-review-heading {
+  max-width: 48rem;
+  margin-bottom: 2rem;
+}
+
+.widget-review-heading h1 {
+  margin: 0.25rem 0 0.55rem;
+  font-size: clamp(1.8rem, 4vw, 3.4rem);
+}
+
+.widget-review-heading p:last-child {
+  margin: 0;
+  color: #9aa39c;
+}
+
+.widget-review-grid {
+  display: grid;
+  max-width: 76rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.widget-review-card.canvas-widget {
+  position: relative;
+  width: 100%;
+  height: clamp(17rem, 31vw, 25rem);
+}
+
+.widget-review-note {
+  max-width: 76rem;
+  margin-top: 1.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 3%);
+  color: #7f8881;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 760px) {
+  .widget-review-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Stream goals */
 
 .canvas-widget .goals-list {

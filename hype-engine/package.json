@@ -1,0 +1,10 @@
+{
+  "name": "hype-engine",
+  "version": "0.1.0",
+  "description": "Quantitative + qualitative hype scoring for a KICK stream. Zero dependencies, runs in browser and Node.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/prediction.js && node test/predictions.js && node test/action-bet.js && node test/sim.js && node test/cases.js",
+    "demo": "node serve.js"
+  }
+}
