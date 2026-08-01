@@ -2266,6 +2266,14 @@ body:has(.glasses-hud) {
   box-shadow: 0 22px 70px rgb(0 0 0 / 24%);
 }
 
+.canvas-widget.widget-suggestion,
+.canvas-widget.widget-chat {
+  overflow: visible;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
 .canvas-widget.editable {
   cursor: grab;
   outline: 1px solid transparent;
@@ -2305,13 +2313,20 @@ body:has(.glasses-hud) {
 }
 
 .canvas-widget .suggestion-content {
+  display: flex;
   min-height: 0;
-  padding: 5% 7%;
+  height: 100%;
+  padding: 5%;
+  align-items: center;
   flex: 1;
 }
 
 .canvas-widget .suggestion-content p {
-  font-size: clamp(0.7rem, 7cqw, 4.3rem);
+  max-width: none;
+  font-size: clamp(0.7rem, 8cqw, 5rem);
+  font-weight: 650;
+  line-height: 1.05;
+  text-shadow: 0 0.1em 0.45em rgb(0 0 0 / 85%);
 }
 
 .canvas-widget .live-cue {
@@ -2349,19 +2364,32 @@ body:has(.glasses-hud) {
 }
 
 .canvas-widget .message-list {
+  display: flex;
   min-height: 0;
-  padding: 2% 5% 4%;
+  padding: 1.5%;
+  gap: 3%;
+  flex-direction: column;
   flex: 1;
 }
 
 .canvas-widget .chat-message {
-  padding: 2.5% 0;
-  grid-template-columns: minmax(0, 0.32fr) minmax(0, 1fr) 2em;
+  padding: 3.5% 4%;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: clamp(0.4rem, 2.5cqw, 0.85rem);
+  background: rgb(21 24 22 / 92%);
+  box-shadow: 0 0.7rem 2rem rgb(0 0 0 / 22%);
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) 2em;
   font-size: clamp(0.4rem, 2.8cqw, 0.82rem);
+}
+
+.canvas-widget .chat-message:last-child {
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
 }
 
 .canvas-widget .empty-messages {
   min-height: 100%;
+  border: 1px dashed rgb(255 255 255 / 12%);
+  border-radius: 0.7rem;
   font-size: clamp(0.4rem, 2.8cqw, 0.8rem);
 }
 

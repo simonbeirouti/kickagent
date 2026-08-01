@@ -37,8 +37,8 @@ export async function updateOverlayLayout(
 ): Promise<void> {
   await query(
     `UPDATE kick_connections
-     SET screen_layouts = jsonb_set(screen_layouts, ARRAY[$2], $3::jsonb, true),
-         overlay_layout = CASE WHEN $2 = 'public' THEN $3::jsonb ELSE overlay_layout END,
+     SET screen_layouts = jsonb_set(screen_layouts, ARRAY[$2], $3::text::jsonb, true),
+         overlay_layout = CASE WHEN $2 = 'public' THEN $3::text::jsonb ELSE overlay_layout END,
          updated_at = now()
      WHERE id = $1 AND active = true`,
     [connectionId, screen, JSON.stringify(layout)],

@@ -3,7 +3,6 @@
 import {
   ActivityIcon,
   BellRingIcon,
-  Clock3Icon,
   CoinsIcon,
   CrownIcon,
   ExternalLinkIcon,
@@ -25,7 +24,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
-import { GlassesSurface } from "@/app/_components/companion-surfaces";
 import {
   AlertsWidget,
   BattleWidget,
@@ -96,11 +94,14 @@ const WIDGET_GROUPS: readonly {
 
 export function KickOverlay({
   accessToken,
+  liveScreen,
   publicMode = false,
 }: {
   readonly accessToken?: string;
+  readonly liveScreen?: Exclude<ManagedScreen, "phone">;
   readonly publicMode?: boolean;
 }) {
+  const standaloneScreen = liveScreen ?? (publicMode ? "public" : undefined);
   const liveState = useLiveOverlayState({ accessToken, publicMode });
   const persistedLayouts = usePersistedScreenLayouts(
     liveState.state?.channel.slug,
@@ -123,7 +124,7 @@ export function KickOverlay({
   const publicLayoutKey = publicLayout ? JSON.stringify(publicLayout) : "";
 
   useEffect(() => {
-    if (!liveState.state?.channel.slug || !publicLayoutKey || publicMode) return;
+    if (!liveState.state?.channel.slug || !publicLayoutKey || standaloneScreen) return;
     let cancelled = false;
     setPublicUrlError(false);
     void requestPublicOverlayUrl(JSON.parse(publicLayoutKey) as OverlayLayout)
@@ -139,7 +140,7 @@ export function KickOverlay({
     return () => {
       cancelled = true;
     };
-  }, [liveState.state?.channel.slug, publicLayoutKey, publicMode]);
+  }, [liveState.state?.channel.slug, publicLayoutKey, standaloneScreen]);
 
   if (liveState.authenticated === undefined) return <LoadingScreen />;
   if (!liveState.authenticated || !liveState.state) {
@@ -147,11 +148,13 @@ export function KickOverlay({
   }
   const state = liveState.state;
 
-  if (publicMode) {
+  if (standaloneScreen) {
+    const layout = state.screenLayouts[standaloneScreen]
+      ?? (standaloneScreen === "public" ? state.layout : []);
     return (
       <main className="public-overlay-shell">
         <OverlayCanvas
-          layout={state.screenLayouts?.public ?? state.layout}
+          layout={layout}
           publicMode
           state={state}
         />
@@ -252,11 +255,7 @@ export function KickOverlay({
             <span>Drag widgets onto the screen</span>
           </div>
           <div className={`screen-canvas-stage ${selectedScreen}`}>
-            {selectedScreen === "glasses" ? (
-              <GlassesSurface />
-            ) : (
-              <OverlayCanvas layout={activeLayout} onLayoutChange={(next) => void saveActiveLayout(next)} screen={selectedScreen} state={state} />
-            )}
+            <OverlayCanvas layout={activeLayout} onLayoutChange={(next) => void saveActiveLayout(next)} screen={selectedScreen} state={state} />
           </div>
         </section>
       </div>
@@ -390,7 +389,7 @@ function OverlayCanvas({
     >
       {layout.map((placement) => (
         <article
-          className={`canvas-widget ${publicMode ? "" : "editable"}`}
+          className={`canvas-widget widget-${placement.kind} ${publicMode ? "" : "editable"}`}
           draggable={!publicMode && resizingId !== placement.id}
           key={placement.id}
           onDragStart={
@@ -428,6 +427,7 @@ function OverlayCanvas({
             />
           ) : null}
           <WidgetContent
+            editable={!publicMode}
             kind={placement.kind}
             state={state}
           />
@@ -444,9 +444,11 @@ function OverlayCanvas({
 }
 
 function WidgetContent({
+  editable,
   kind,
   state,
 }: {
+  readonly editable: boolean;
   readonly kind: WidgetKind;
   readonly state: OverlayState;
 }) {
@@ -461,46 +463,16 @@ function WidgetContent({
   if (kind === "suggestion") {
     return (
       <div className="canvas-widget-inner suggestion-canvas-widget">
-        <WidgetHeader
-          icon={<SparklesIcon size={17} />}
-          label="Agent live brief"
-        >
-          <Freshness generatedAt={state.summary?.generatedAt} stale={state.summary?.stale} />
-        </WidgetHeader>
         <div className="suggestion-content">
-          <p>{state.summary?.text ?? "Waiting for the first agent brief…"}</p>
-        </div>
-        <div className="live-cue">
-          <span><SparklesIcon size={13} /> Next talking point</span>
           <p>{suggestionText(state)}</p>
         </div>
-        <footer className="widget-footer">
-          <span>{state.channel.streamTitle || "No stream title"}</span>
-          <span>{state.channel.category || "No category"}</span>
-        </footer>
       </div>
     );
   }
   if (kind === "chat") {
     return (
       <div className="canvas-widget-inner chat-canvas-widget">
-        <WidgetHeader
-          icon={<MessageCircleIcon size={17} />}
-          label="Live chat"
-        >
-          <span className="count-badge">{state.messages.length}/5</span>
-        </WidgetHeader>
-        <div className="message-list">
-          {state.messages.length === 0 ? (
-            <div className="empty-messages"><RadioIcon size={20} /></div>
-          ) : state.messages.map((message) => (
-            <div className="chat-message" key={message.id}>
-              <span className="chat-user">{message.username}</span>
-              <span className="chat-copy">{message.content}</span>
-              <time>{relativeTime(message.createdAt)}</time>
-            </div>
-          ))}
-        </div>
+        <RecentChatCards editable={editable} messages={state.messages} />
       </div>
     );
   }
@@ -548,10 +520,6 @@ function WidgetKindIcon({ kind }: { readonly kind: WidgetKind }) {
 
 function StatusPill({ live }: { readonly live: boolean }) {
   return <span className={live ? "status-pill live" : "status-pill offline"}><span className="status-dot" />{live ? "Live" : "Offline"}</span>;
-}
-
-function Freshness({ generatedAt, stale }: { readonly generatedAt?: string; readonly stale?: boolean }) {
-  return <span className={stale ? "freshness stale" : "freshness"}><Clock3Icon size={13} />{generatedAt ? (stale ? "Delayed" : relativeTime(generatedAt)) : "Waiting"}</span>;
 }
 
 function startLibraryDrag(event: DragEvent<HTMLButtonElement>, kind: WidgetKind) {
@@ -610,6 +578,46 @@ async function requestPublicOverlayUrl(layout: OverlayLayout): Promise<string> {
 function suggestionText(state: OverlayState): string {
   if (state.suggestion?.text) return state.suggestion.text;
   return "Listening for a useful moment…";
+}
+
+function RecentChatCards({
+  editable,
+  messages,
+}: {
+  readonly editable: boolean;
+  readonly messages: OverlayState["messages"];
+}) {
+  const [now, setNow] = useState<number>();
+
+  useEffect(() => {
+    const updateNow = () => setNow(Date.now());
+    updateNow();
+    const timer = window.setInterval(updateNow, 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const recentMessages = now === undefined
+    ? []
+    : messages.filter((message) => {
+        const createdAt = Date.parse(message.createdAt);
+        return Number.isFinite(createdAt) && now - createdAt < 60_000;
+      });
+
+  if (recentMessages.length === 0) {
+    return editable ? <div className="empty-messages"><RadioIcon size={20} /><span>Recent chats appear here</span></div> : null;
+  }
+
+  return (
+    <div className="message-list">
+      {recentMessages.map((message) => (
+        <div className="chat-message" key={message.id}>
+          <span className="chat-user">{message.username}</span>
+          <span className="chat-copy">{message.content}</span>
+          <time>{relativeTime(message.createdAt)}</time>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function energyLabel(score: number): string {

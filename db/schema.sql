@@ -59,6 +59,26 @@ SET screen_layouts = jsonb_build_object('public', overlay_layout)
 WHERE screen_layouts = '{}'::jsonb;
 
 -- statement-breakpoint
+UPDATE kick_connections
+SET overlay_layout = (overlay_layout #>> '{}')::jsonb
+WHERE jsonb_typeof(overlay_layout) = 'string';
+
+-- statement-breakpoint
+UPDATE kick_connections
+SET screen_layouts = (
+  SELECT jsonb_object_agg(
+    key,
+    CASE WHEN jsonb_typeof(value) = 'string' THEN (value #>> '{}')::jsonb ELSE value END
+  )
+  FROM jsonb_each(screen_layouts)
+)
+WHERE EXISTS (
+  SELECT 1
+  FROM jsonb_each(screen_layouts)
+  WHERE jsonb_typeof(value) = 'string'
+);
+
+-- statement-breakpoint
 CREATE TABLE IF NOT EXISTS kick_webhook_events (
   event_message_id text PRIMARY KEY,
   event_type text NOT NULL,
