@@ -65,6 +65,7 @@ export async function GET(request: Request): Promise<Response> {
     }
     return Response.json(
       {
+        activeBet: null,
         authenticated: true,
         channel: {
           category: channel.categoryName ?? null,
@@ -86,6 +87,7 @@ export async function GET(request: Request): Promise<Response> {
         layout:
           overlayAccess?.kind === "stateless" ? overlayAccess.layout : DEFAULT_OVERLAY_LAYOUT,
         messages: [],
+        prediction: null,
         suggestion: null,
         summary: null,
         updatedAt: new Date().toISOString(),
@@ -158,6 +160,7 @@ export async function GET(request: Request): Promise<Response> {
     (!suggestion || Date.now() - generatedAt > 90_000 || latest?.status === "failed");
   return Response.json(
     {
+      activeBet: null,
       authenticated: true,
       channel: {
         category: connection.category_name,
@@ -179,6 +182,7 @@ export async function GET(request: Request): Promise<Response> {
         id: message.message_id,
         username: message.sender_username,
       })),
+      prediction: null,
       suggestion: suggestion
         ? {
             basis: suggestion.basis,

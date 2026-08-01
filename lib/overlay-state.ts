@@ -1,6 +1,12 @@
 import { DEFAULT_OVERLAY_LAYOUT, type OverlayLayout } from "@/lib/overlay-layout";
 
 export interface OverlayState {
+  readonly activeBet: {
+    readonly amount: number;
+    readonly payout: number | null;
+    readonly status: "pending" | "locked" | "won" | "lost";
+    readonly text: string;
+  } | null;
   readonly authenticated: true;
   readonly channel: {
     readonly category: string | null;
@@ -22,6 +28,13 @@ export interface OverlayState {
     readonly id: string;
     readonly username: string;
   }[];
+  readonly prediction: {
+    readonly endsInSeconds: number;
+    readonly noPool: number;
+    readonly question: string;
+    readonly yesPercent: number;
+    readonly yesPool: number;
+  } | null;
   readonly screenLayouts?: {
     readonly glasses?: OverlayLayout;
     readonly phone?: OverlayLayout;
@@ -49,6 +62,12 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
   const secondsAgo = (seconds: number) => new Date(now.getTime() - seconds * 1_000).toISOString();
 
   return {
+    activeBet: {
+      amount: 50,
+      payout: null,
+      status: "pending",
+      text: "Talk to the girls on the left",
+    },
     authenticated: true,
     channel: {
       category: "Just Chatting",
@@ -84,6 +103,13 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
         username: "devon",
       },
     ],
+    prediction: {
+      endsInSeconds: 313,
+      noPool: 506,
+      question: "Will you hit 13,000 trophies this stream?",
+      yesPercent: 62,
+      yesPool: 824,
+    },
     screenLayouts: { public: DEFAULT_OVERLAY_LAYOUT },
     suggestion: {
       basis: "chat",
