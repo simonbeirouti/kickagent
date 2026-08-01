@@ -3,11 +3,17 @@ import { sleep } from "workflow";
 import { cleanupExpiredData as deleteExpiredData } from "@/lib/cleanup";
 import { appUrl } from "@/lib/env";
 import { query } from "@/lib/db";
+import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
 import { findConnectionById } from "@/lib/kick/repository";
 import { suggestionSchema, type Suggestion } from "@/lib/kick/types";
 import { nextWindow } from "@/lib/kick/webhook";
 import { signInternalJwt } from "@/lib/security";
 import { buildSuggestionPrompt, type PromptChatMessage } from "@/lib/suggestions";
+
+// Trailing lookback the hype engine replays each tick to compute its signal. Must
+// comfortably exceed HypeEngine's default 45s warm-up so `ready` reflects a locked
+// baseline rather than the workflow step's own cold start.
+const HYPE_LOOKBACK_MS = 3 * 60_000;
 
 interface WindowPlan {
   readonly end: string;
@@ -36,9 +42,10 @@ const outputSchema = {
   additionalProperties: false,
   properties: {
     basis: { enum: ["chat", "stream_context"], type: "string" },
+    insight: { maxLength: 140, minLength: 1, type: "string" },
     suggestion: { maxLength: 140, minLength: 1, type: "string" },
   },
-  required: ["suggestion", "basis"],
+  required: ["suggestion", "basis", "insight"],
   type: "object",
 } as const;
 
@@ -103,7 +110,8 @@ async function analyzeWindow(
     [connectionId, windowStart, windowEnd],
   );
 
-  const [windowRows, recentRows, recentSuggestionRows] = await Promise.all([
+  const windowEndMs = new Date(windowEnd).getTime();
+  const [windowRows, recentRows, recentSuggestionRows, hypeLookbackRows] = await Promise.all([
     query<ChatRow>(
       `SELECT
          message_id, sender_user_id::text, sender_username, sender_profile_picture,
@@ -128,15 +136,30 @@ async function analyzeWindow(
        ORDER BY window_start DESC LIMIT 4`,
       [connectionId],
     ),
+    query<HypeChatRow>(
+      `SELECT message_id, sender_user_id::text, sender_username, content, created_at
+       FROM chat_messages
+       WHERE connection_id = $1 AND created_at >= $2 AND created_at < $3
+       ORDER BY created_at ASC`,
+      [connectionId, new Date(windowEndMs - HYPE_LOOKBACK_MS).toISOString(), windowEnd],
+    ),
   ]);
+  const hype = computeHypeSnapshot(hypeLookbackRows, windowEndMs);
   const prompt = buildSuggestionPrompt({
     categoryName: connection.category_name ?? undefined,
+    hype,
     recentChat: recentRows.reverse().map(toPromptMessage),
     recentSuggestions: recentSuggestionRows.map((row) => row.suggestion),
     streamTitle: connection.stream_title ?? undefined,
     windowChat: windowRows.map(toPromptMessage),
   });
   const suggestion = await requestSuggestion(connectionId, prompt);
+  // `insight` isn't persisted yet — analysis_windows has no column for it. It's
+  // logged so the hype-aware read is visible in workflow run logs until the
+  // overlay is wired to show it.
+  console.info(
+    `[kick-suggestions] connection=${connectionId} window=${windowStart} hype=${hype.score} insight=${JSON.stringify(suggestion.insight)}`,
+  );
   await query(
     `UPDATE analysis_windows SET
       status = 'complete', suggestion = $4, basis = $5, error = NULL,

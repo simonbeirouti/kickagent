@@ -101,6 +101,7 @@ export const kickLivestreamMetadataEventSchema = z.object({
 
 export const suggestionSchema = z.object({
   basis: z.enum(["chat", "stream_context"]),
+  insight: z.string().trim().min(1).max(140),
   suggestion: z.string().trim().min(1).max(140),
 });
 
