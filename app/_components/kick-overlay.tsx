@@ -148,7 +148,11 @@ export function KickOverlay({
     };
   }, [liveState.state?.channel.slug, publicLayoutKey, standaloneScreen]);
 
-  if (liveState.authenticated === undefined) return <LoadingScreen />;
+  if (liveState.authenticated === undefined) {
+    return standaloneScreen
+      ? <main aria-label="Loading overlay" className="public-overlay-shell" />
+      : <LoadingScreen />;
+  }
   if (!liveState.authenticated || !liveState.state) {
     return publicMode ? <InvalidOverlayScreen /> : <ConnectScreen error={liveState.error} />;
   }

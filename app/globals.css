@@ -82,6 +82,7 @@
 
 html {
   height: 100%;
+  background: transparent;
 }
 
 body {
@@ -95,8 +96,10 @@ body {
   font-family: var(--font-sans);
 }
 
+html:has(.public-overlay-shell),
 body:has(.public-overlay-shell),
 body:has(.glasses-hud) {
+  overflow: hidden;
   background: transparent;
 }
 
@@ -2245,15 +2248,19 @@ body:has(.glasses-hud) {
   border-radius: 2rem;
 }
 
-.public-overlay-shell,
-.overlay-canvas.public {
-  width: 1920px;
-  height: 1080px;
+.public-overlay-shell {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: transparent;
 }
 
-.public-overlay-shell {
-  overflow: hidden;
-  background: transparent;
+.overlay-canvas.public {
+  width: min(100vw, 177.7778vh);
+  aspect-ratio: 16 / 9;
+  flex: none;
 }
 
 .canvas-widget {
@@ -2376,16 +2383,28 @@ body:has(.glasses-hud) {
 
 .canvas-widget .chat-message {
   padding: 3.5% 4%;
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 62%);
   border-radius: clamp(0.4rem, 2.5cqw, 0.85rem);
-  background: rgb(21 24 22 / 92%);
-  box-shadow: 0 0.7rem 2rem rgb(0 0 0 / 22%);
+  background: rgb(247 249 247 / 92%);
+  box-shadow: 0 0.7rem 2rem rgb(0 0 0 / 18%);
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) 2em;
   font-size: clamp(0.4rem, 2.8cqw, 0.82rem);
 }
 
 .canvas-widget .chat-message:last-child {
-  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  border-bottom: 1px solid rgb(255 255 255 / 62%);
+}
+
+.canvas-widget .chat-user {
+  color: #276c20;
+}
+
+.canvas-widget .chat-copy {
+  color: #182019;
+}
+
+.canvas-widget .chat-message time {
+  color: #69716a;
 }
 
 .canvas-widget .hype-content {
