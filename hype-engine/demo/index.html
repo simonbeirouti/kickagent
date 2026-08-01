@@ -129,6 +129,89 @@
   body.live #chatCol { display: none; }
   body.live main { grid-template-columns: 1.15fr 1fr; }
   body.live .mock-only { display: none; }
+
+  /* Prediction popup — viewer betting without leaving the live dashboard. */
+  #predictionPopup { position: fixed; right: 14px; bottom: 14px; z-index: 20; width: min(390px, calc(100vw - 28px)); }
+  #predictionPopup[hidden] { display: none; }
+  .pred-card { background: #181d1b; border: 1px solid #334039; border-radius: 16px; padding: 12px; box-shadow: 0 22px 65px rgb(0 0 0 / 62%); }
+  .pred-close { width: 27px; height: 27px; padding: 0; border-radius: 50%; font-size: 1rem; line-height: 1; }
+  .pred-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .pred-heading-actions { display: flex; align-items: center; gap: 5px; }
+  .pred-question { margin: 0; font-size: .98rem; line-height: 1.3; }
+  .pred-status { flex-shrink: 0; padding: 3px 7px; border: 1px solid rgb(83 252 24 / 48%); border-radius: 999px; color: var(--green); font-size: .61rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+  .pred-status.locked { border-color: var(--amber); color: var(--amber); }
+  .pred-time { display: flex; justify-content: space-between; margin: 8px 0 4px; color: var(--muted); font-size: .68rem; }
+  .pred-time strong { color: var(--text); font-variant-numeric: tabular-nums; }
+  .pred-progress { height: 5px; margin-bottom: 9px; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 8%); }
+  .pred-progress > div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #27a80f, var(--green)); transition: width .2s linear; }
+  .pred-stake { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; color: var(--muted); font-size: .68rem; }
+  .pred-stake > span { margin-right: auto; }
+  .pred-chip { min-width: 32px; padding: 4px 5px; border-radius: 6px; color: var(--muted); font-size: .66rem; }
+  .pred-chip.active { border-color: var(--green); color: var(--green); background: rgb(83 252 24 / 8%); }
+  .pred-input { width: 50px; padding: 4px 5px; border: 1px solid var(--border); border-radius: 6px; outline: 0; background: #0d110f; color: var(--text); font-size: .66rem; font-variant-numeric: tabular-nums; }
+  .pred-input:focus { border-color: var(--green); }
+  .pred-options { display: grid; gap: 7px; }
+  .pred-option { --option: var(--green); position: relative; min-height: 47px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: #0d110f; }
+  .pred-option.winner { border-color: var(--option); box-shadow: 0 0 0 1px var(--option), 0 0 20px color-mix(in srgb, var(--option) 18%, transparent); }
+  .pred-fill { position: absolute; inset: 0 auto 0 0; width: var(--share); background: color-mix(in srgb, var(--option) 22%, transparent); transition: width .2s ease; }
+  .pred-option-content { position: relative; display: grid; grid-template-columns: minmax(48px, 1fr) auto auto auto; align-items: center; gap: 7px; min-height: 47px; padding: 0 8px; }
+  .pred-option-name { color: var(--option); font-size: .88rem; font-weight: 800; text-transform: uppercase; }
+  .pred-points { color: var(--muted); font-size: .68rem; font-variant-numeric: tabular-nums; }
+  .pred-percent { color: var(--option); font-size: .92rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .pred-actions { display: flex; gap: 3px; }
+  .pred-action { height: 27px; padding: 0 7px; border-radius: 6px; font-size: .66rem; font-weight: 700; }
+  .pred-action:hover:not(:disabled) { border-color: var(--option); color: var(--option); }
+  .pred-action:disabled { cursor: not-allowed; opacity: .42; }
+  .pred-footer { display: flex; gap: 16px; margin-top: 8px; color: var(--muted); font-size: .69rem; }
+  .pred-footer strong { color: var(--text); font-variant-numeric: tabular-nums; }
+  .pred-readonly { margin-bottom: 8px; color: var(--muted); font-size: .68rem; }
+
+  /* Action bets are a separate viewer proposal surface. */
+  #actionBetPopup { position: fixed; right: 14px; bottom: 14px; z-index: 21; width: min(620px, calc(100vw - 28px)); }
+  #actionBetPopup[hidden] { display: none; }
+  .action-card { background: #202322; border: 1px solid #3a403d; border-radius: 16px; padding: 16px; box-shadow: 0 22px 65px rgb(0 0 0 / 68%); }
+  .action-toolbar { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; }
+  .action-tab { padding: 7px 11px; color: var(--muted); }
+  .action-tab.active { border-color: var(--green); color: var(--green); background: rgb(83 252 24 / 7%); }
+  .action-balance { margin-left: auto; padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .78rem; }
+  .action-balance strong { color: var(--text); font-size: .9rem; }
+  .action-close { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 1.05rem; }
+  .action-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .action-title { margin: 0; font-size: 1.05rem; }
+  .action-phase { padding: 4px 8px; border-radius: 999px; background: #292f2c; color: var(--text); font-size: .7rem; font-weight: 700; white-space: nowrap; }
+  .action-copy { margin: 5px 0 14px; color: var(--muted); font-size: .82rem; }
+  .action-fields { display: grid; grid-template-columns: 1fr 155px; gap: 10px; }
+  .action-field { display: grid; gap: 5px; color: var(--text); font-size: .75rem; }
+  .action-field input, .action-field select { width: 100%; padding: 10px 11px; border: 1px solid #3a403d; border-radius: 9px; outline: 0; background: #161918; color: var(--text); font: inherit; }
+  .action-field input:focus, .action-field select:focus { border-color: var(--green); }
+  .action-submit { margin-top: 11px; background: var(--green); border-color: var(--green); color: #08210a; font-weight: 800; }
+  .action-streamer-note { padding: 16px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: .82rem; }
+  .action-proposal { padding: 11px; border: 1px solid #3a403d; border-radius: 10px; background: #161918; }
+  .action-proposal h4 { margin: 0 0 4px; font-size: .94rem; line-height: 1.35; }
+  .action-category { color: var(--green); font-size: .68rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+  .action-time { display: flex; justify-content: space-between; margin: 10px 0 5px; color: var(--muted); font-size: .72rem; }
+  .action-time strong { color: var(--text); font-variant-numeric: tabular-nums; }
+  .action-progress { height: 6px; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 8%); }
+  .action-progress > div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #217d11, var(--green)); transition: width .2s linear; }
+  .action-stats { display: flex; gap: 18px; margin: 9px 0; color: var(--muted); font-size: .74rem; }
+  .action-stats strong { color: var(--text); }
+  .action-backing { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .action-backing > span { color: var(--muted); font-size: .72rem; }
+  .action-back-input { width: 68px; padding: 7px 8px; border: 1px solid #3a403d; border-radius: 8px; outline: 0; background: #111412; color: var(--text); font-variant-numeric: tabular-nums; }
+  .action-back-input:focus { border-color: var(--green); }
+  .action-back-button { margin-left: auto; background: var(--green); border-color: var(--green); color: #08210a; font-weight: 800; }
+  .action-review-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+  .action-accept { background: var(--green); border-color: var(--green); color: #08210a; font-weight: 800; }
+  .action-reject { border-color: var(--red); color: var(--red); }
+  .action-modify { border-color: var(--amber); color: var(--amber); }
+  .action-modify-form { display: grid; gap: 8px; margin-top: 10px; }
+  .action-modify-form input { width: 100%; padding: 9px 10px; border: 1px solid var(--amber); border-radius: 8px; outline: 0; background: #161918; color: var(--text); }
+  .action-modify-note { color: var(--muted); font-size: .68rem; }
+  .action-result { margin-top: 10px; padding: 10px; border-radius: 9px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
+  .action-result.accepted { color: var(--green); background: rgb(83 252 24 / 9%); border: 1px solid rgb(83 252 24 / 35%); }
+  .action-result.rejected { color: var(--red); background: rgb(255 77 77 / 9%); border: 1px solid rgb(255 77 77 / 35%); }
+  @media (max-width: 430px) { #predictionPopup { right: 8px; bottom: 8px; width: calc(100vw - 16px); } }
+  @media (max-width: 650px) { #actionBetPopup { right: 8px; bottom: 8px; width: calc(100vw - 16px); } .action-fields { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -137,6 +220,8 @@
   <span class="clock" id="clock">0:00</span>
   <span id="srcBadge">MOCK REPLAY</span>
   <div class="spacer"></div>
+  <button id="predictionBtn">Predictions</button>
+  <button id="actionBetBtn">Bet Action</button>
   <button id="playBtn" class="primary mock-only">Pause</button>
   <button id="speedBtn" class="mock-only">Speed 1×</button>
   <button id="restartBtn">Restart</button>
@@ -187,6 +272,9 @@
   </div>
 </main>
 
+<aside id="predictionPopup" aria-label="Prediction" hidden></aside>
+<aside id="actionBetPopup" aria-label="Bet action" hidden></aside>
+
 <script type="module">
 import { HypeEngine } from '../src/engine.js';
 import { TopicTracker } from '../src/topics.js';
@@ -194,6 +282,8 @@ import { KickAssistant } from '../src/assistant.js';
 import { TrendingTopics } from '../src/trending.js';
 import { HighlightTracker } from '../src/highlights.js';
 import { createScriptedReplay } from '../src/mock.js';
+import { Prediction } from '../src/prediction.js';
+import { ActionBet } from '../src/action-bet.js';
 
 const $ = (id) => document.getElementById(id);
 const fmtClock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
@@ -215,6 +305,180 @@ const CHANNEL = params.get('channel') ? Number(params.get('channel')) : null;
 let engine, topics, assistant, highlights, events, ei, simNow, playing = true, speed = 1;
 let displayHype = 0, targetState = null, lastSampleAt = 0;
 let es = null, liveT0 = 0;
+
+// ---- prediction popup ----
+let prediction = null;
+let predictionStake = 50;
+let simulatedVoter = 0;
+let predictionRenderTimer = null;
+let predictionVoteTimer = null;
+let actionBetView = 'viewer';
+let actionBet = null;
+let actionBackingStake = 50;
+let actionBalance = 1250;
+let actionModifying = false;
+let simulatedBacker = 0;
+let actionRenderTimer = null;
+let actionBackingTimer = null;
+const predictionColors = ['#53fc18', '#ff6565'];
+const pointsFormat = new Intl.NumberFormat('en-US');
+const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+})[char]);
+
+function remainingLabel(ms) {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
+}
+
+function openPrediction() {
+  closeActionBet();
+  const now = Date.now();
+  prediction = new Prediction({
+    question: 'Will Neon hit 13,000 trophies this stream?',
+    opensAt: now,
+    locksAt: now + 60_000,
+  }, now);
+  predictionStake = 50;
+  simulatedVoter = 0;
+  $('predictionPopup').hidden = false;
+  renderPrediction();
+  clearInterval(predictionRenderTimer);
+  clearInterval(predictionVoteTimer);
+  predictionRenderTimer = setInterval(renderPrediction, 250);
+  predictionVoteTimer = setInterval(() => {
+    const voteNow = Date.now();
+    if (!prediction || prediction.status(voteNow) !== 'open' || Math.random() > 0.9) return;
+    const option = prediction.options[Math.floor(Math.random() * prediction.options.length)];
+    const amount = [25, 50, 100][Math.floor(Math.random() * 3)];
+    prediction.vote(option.id, { voterId: `sim-${++simulatedVoter}`, points: amount, now: voteNow });
+    renderPrediction();
+  }, 500);
+}
+
+function closePrediction() {
+  clearInterval(predictionRenderTimer);
+  clearInterval(predictionVoteTimer);
+  predictionRenderTimer = null;
+  predictionVoteTimer = null;
+  prediction = null;
+  $('predictionPopup').hidden = true;
+  $('predictionPopup').innerHTML = '';
+}
+
+function renderPrediction() {
+  if (!prediction) return;
+  if (document.activeElement?.id === 'predictionStake') return;
+  const now = Date.now();
+  const snapshot = prediction.snapshot(now);
+  const duration = Math.max(1, prediction.locksAt - prediction.opensAt);
+  const remaining = Math.max(0, prediction.locksAt - now);
+  const remainingPercent = Math.min(100, (remaining / duration) * 100);
+  const maxPoints = Math.max(...snapshot.options.map((option) => option.points));
+  const visibleOptions = snapshot.status === 'locked'
+    ? snapshot.options.filter((option) => option.points === maxPoints)
+    : snapshot.options;
+
+  $('predictionPopup').innerHTML = `<section class="pred-card">
+    <div class="pred-heading">
+      <h3 class="pred-question">🏆 ${escapeHtml(prediction.question)}</h3>
+      <span class="pred-heading-actions"><span class="pred-status ${snapshot.status}">${snapshot.status === 'locked' ? 'Result' : `Locks in ${remainingLabel(remaining)}`}</span><button class="pred-close" data-pred-action="close" aria-label="Close prediction">×</button></span>
+    </div>
+    <div class="pred-time"><span>Voting time</span><strong>${snapshot.status === 'locked' ? 'Voting locked' : `${remainingLabel(remaining)} remaining`}</strong></div>
+    <div class="pred-progress" role="progressbar" aria-label="Voting time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(remainingPercent)}"><div style="width:${remainingPercent}%"></div></div>
+    ${snapshot.status === 'open' ? `<label class="pred-stake"><span>Points per vote</span>${[25, 50, 100].map((amount) => `<button type="button" class="pred-chip ${predictionStake === amount ? 'active' : ''}" data-stake="${amount}">${amount}</button>`).join('')}<input id="predictionStake" class="pred-input" type="number" min="1" step="10" value="${predictionStake}" aria-label="Custom stake"></label>` : `<p class="pred-readonly">Final result</p>`}
+    <div class="pred-options">${visibleOptions.map((option) => {
+      const optionIndex = snapshot.options.findIndex((candidate) => candidate.id === option.id);
+      const viewerPoints = prediction.viewerPoints(option.id);
+      const color = predictionColors[optionIndex % predictionColors.length];
+      return `<div class="pred-option ${snapshot.status === 'locked' ? 'winner' : ''}" style="--option:${color};--share:${option.percentage}%">
+        <div class="pred-fill"></div>
+        <div class="pred-option-content">
+          <span class="pred-option-name">${escapeHtml(option.label)}</span>
+          <span class="pred-points">${pointsFormat.format(option.points)} pts${viewerPoints ? ` · yours ${pointsFormat.format(viewerPoints)}` : ''}</span>
+          <span class="pred-percent">${option.percentage}%</span>
+          ${snapshot.status === 'open' ? `<span class="pred-actions"><button class="pred-action" data-vote-action="remove" data-option="${optionIndex}" ${viewerPoints ? '' : 'disabled'}>−</button><button class="pred-action" data-vote-action="add" data-option="${optionIndex}">+</button></span>` : ''}
+        </div>
+      </div>`;
+    }).join('')}</div>
+    <footer class="pred-footer"><span>Total pool <strong>${pointsFormat.format(snapshot.totalPoints)} HP</strong></span><span>Participants <strong>${pointsFormat.format(snapshot.participantCount)}</strong></span></footer>
+  </section>`;
+
+}
+
+function renderActionBet() {
+  if ($('actionBetPopup').hidden) return;
+  if (['actionBackStake', 'actionModifyIdea'].includes(document.activeElement?.id)) return;
+  const now = Date.now();
+  const snapshot = actionBet?.snapshot(now);
+  const remaining = snapshot ? Math.max(0, snapshot.locksAt - now) : 0;
+  const duration = snapshot ? Math.max(1, snapshot.locksAt - snapshot.opensAt) : 1;
+  const remainingPercent = snapshot ? Math.min(100, (remaining / duration) * 100) : 0;
+  const phaseLabel = !snapshot ? 'Proposal phase' : {
+    backing: 'Backing phase', review: 'Streamer review', accepted: 'Accepted', rejected: 'Rejected',
+  }[snapshot.status];
+
+  $('actionBetPopup').innerHTML = `<section class="action-card">
+    <div class="action-toolbar">
+      <button class="action-tab ${actionBetView === 'viewer' ? 'active' : ''}" data-action-view="viewer">Viewer view</button>
+      <button class="action-tab ${actionBetView === 'streamer' ? 'active' : ''}" data-action-view="streamer">Streamer view</button>
+      <span class="action-balance">Balance: <strong>${pointsFormat.format(actionBalance)}</strong> Hype Points</span>
+      <button class="action-close" data-action-close aria-label="Close action bets">×</button>
+    </div>
+    <div class="action-title-row"><h3 class="action-title">${actionBetView === 'viewer' ? (snapshot ? 'Back this viewer challenge' : 'Propose something for the streamer') : 'Review viewer proposals'}</h3><span class="action-phase">${phaseLabel}</span></div>
+    <p class="action-copy">${actionBetView === 'viewer' ? 'Viewers can support safe, harmless challenges using Hype Points.' : 'Accept, reject, or revise a challenge after backing closes.'}</p>
+    ${!snapshot && actionBetView === 'viewer' ? `<form id="actionBetForm">
+      <div class="action-fields">
+        <label class="action-field">Challenge idea<input id="actionIdea" maxlength="120" value="Play the next round using a random character" required></label>
+        <label class="action-field">Category<select id="actionCategory"><option>Performance</option><option>Gameplay</option><option>Community</option></select></label>
+      </div>
+      <button class="action-submit" type="submit">Submit proposal</button>
+    </form>` : !snapshot ? `<div class="action-streamer-note">No proposals are waiting yet. Viewer submissions will appear here for approval.</div>` : `
+      <div class="action-proposal"><span class="action-category">${escapeHtml(snapshot.category)}</span><h4>${escapeHtml(snapshot.idea)}</h4></div>
+      ${snapshot.status === 'backing' || snapshot.status === 'review' ? `<div class="action-time"><span>${snapshot.status === 'backing' ? 'Viewer backing' : 'Backing closed'}</span><strong>${snapshot.status === 'backing' ? `${remainingLabel(remaining)} remaining` : 'Ready for review'}</strong></div><div class="action-progress" role="progressbar" aria-label="Backing time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(remainingPercent)}"><div style="width:${remainingPercent}%"></div></div>` : ''}
+      <div class="action-stats"><span>Backed <strong>${pointsFormat.format(snapshot.totalPoints)} HP</strong></span><span>Backers <strong>${pointsFormat.format(snapshot.backerCount)}</strong></span></div>
+      ${actionBetView === 'viewer' ? renderViewerAction(snapshot) : renderStreamerAction(snapshot)}
+    `}
+  </section>`;
+}
+
+function renderViewerAction(snapshot) {
+  if (snapshot.status === 'backing') return `<div class="action-backing"><span>Back with</span>${[25, 50, 100].map((amount) => `<button class="pred-chip ${actionBackingStake === amount ? 'active' : ''}" data-backing-stake="${amount}">${amount}</button>`).join('')}<input id="actionBackStake" class="action-back-input" type="number" min="1" step="10" value="${actionBackingStake}" aria-label="Backing points"><button class="action-back-button" data-action-command="back" ${actionBalance >= actionBackingStake ? '' : 'disabled'}>Back proposal</button></div>`;
+  if (snapshot.status === 'review') return `<div class="action-streamer-note">Backing has closed. The proposal is waiting for the streamer’s decision.</div>`;
+  return `<div class="action-result ${snapshot.status}">${snapshot.status}</div><button class="action-submit" data-action-command="new">Propose another</button>`;
+}
+
+function renderStreamerAction(snapshot) {
+  if (snapshot.status === 'backing') return `<div class="action-streamer-note">Viewer backing is still open for ${remainingLabel(snapshot.locksAt - Date.now())}. Review controls unlock when the minute ends.</div>`;
+  if (snapshot.status === 'accepted' || snapshot.status === 'rejected') return `<div class="action-result ${snapshot.status}">${snapshot.status}</div>`;
+  if (actionModifying) return `<form id="actionModifyForm" class="action-modify-form"><input id="actionModifyIdea" maxlength="120" value="${escapeHtml(snapshot.idea)}" required><span class="action-modify-note">Saving a change resets backing and gives viewers one new minute.</span><span><button class="action-modify" type="submit">Save &amp; reopen backing</button> <button type="button" data-action-command="cancel-modify">Cancel</button></span></form>`;
+  return `<div class="action-review-actions"><button class="action-accept" data-action-command="accept">Accept challenge</button><button class="action-reject" data-action-command="reject">Reject</button><button class="action-modify" data-action-command="modify">Propose modification</button></div>`;
+}
+
+function startActionTimers() {
+  clearInterval(actionRenderTimer);
+  clearInterval(actionBackingTimer);
+  actionRenderTimer = setInterval(renderActionBet, 250);
+  actionBackingTimer = setInterval(() => {
+    const now = Date.now();
+    if (!actionBet || actionBet.status(now) !== 'backing' || Math.random() > 0.88) return;
+    const points = [25, 50, 100][Math.floor(Math.random() * 3)];
+    actionBet.back({ viewerId: `action-backer-${++simulatedBacker}`, points, now });
+    renderActionBet();
+  }, 650);
+}
+
+function openActionBet() {
+  closePrediction();
+  actionBetView = 'viewer';
+  $('actionBetPopup').hidden = false;
+  renderActionBet();
+}
+
+function closeActionBet() {
+  $('actionBetPopup').hidden = true;
+  $('actionBetPopup').innerHTML = '';
+}
 
 function toast(cls, html, when) {
   const el = document.createElement('div');
@@ -434,6 +698,85 @@ function spliceEvents(add) {
 $('playBtn').onclick = () => { playing = !playing; $('playBtn').textContent = playing ? 'Pause' : 'Play'; };
 $('speedBtn').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; $('speedBtn').textContent = `Speed ${speed}×`; };
 $('restartBtn').onclick = () => boot();
+$('predictionBtn').onclick = () => prediction ? closePrediction() : openPrediction();
+$('actionBetBtn').onclick = () => $('actionBetPopup').hidden ? openActionBet() : closeActionBet();
+$('predictionPopup').addEventListener('click', (event) => {
+  const close = event.target.closest('[data-pred-action="close"]');
+  if (close) { closePrediction(); return; }
+
+  const stake = event.target.closest('[data-stake]');
+  if (stake) { predictionStake = Number(stake.dataset.stake); renderPrediction(); return; }
+
+  const vote = event.target.closest('[data-vote-action]');
+  if (!vote || !prediction) return;
+  const option = prediction.options[Number(vote.dataset.option)];
+  if (!option) return;
+  const result = prediction.vote(option.id, { points: predictionStake, action: vote.dataset.voteAction });
+  renderPrediction();
+});
+$('predictionPopup').addEventListener('input', (event) => {
+  if (event.target.id !== 'predictionStake') return;
+  predictionStake = Math.max(1, Math.round(Number(event.target.value) || 1));
+});
+$('actionBetPopup').addEventListener('click', (event) => {
+  if (event.target.closest('[data-action-close]')) { closeActionBet(); return; }
+  const view = event.target.closest('[data-action-view]');
+  if (view) { actionBetView = view.dataset.actionView; renderActionBet(); }
+  const stake = event.target.closest('[data-backing-stake]');
+  if (stake) { actionBackingStake = Number(stake.dataset.backingStake); renderActionBet(); return; }
+  const command = event.target.closest('[data-action-command]')?.dataset.actionCommand;
+  if (!command || !actionBet) return;
+  const now = Date.now();
+  if (command === 'back') {
+    const result = actionBet.back({ viewerId: 'demo-viewer', points: actionBackingStake, now });
+    if (result.changed) actionBalance -= result.points;
+  } else if (command === 'accept' && actionBet.accept(now)) {
+    toast('', `<b>Action accepted:</b> ${escapeHtml(actionBet.idea)}`, simNow);
+  } else if (command === 'reject' && actionBet.reject(now)) {
+    toast('flag', `<b>Action rejected:</b> ${escapeHtml(actionBet.idea)}`, simNow);
+  } else if (command === 'modify') {
+    actionModifying = true;
+  } else if (command === 'cancel-modify') {
+    actionModifying = false;
+  } else if (command === 'new') {
+    actionBet = null;
+    actionModifying = false;
+    clearInterval(actionRenderTimer);
+    clearInterval(actionBackingTimer);
+  }
+  renderActionBet();
+});
+$('actionBetPopup').addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (event.target.id === 'actionBetForm') {
+    const idea = $('actionIdea')?.value.trim();
+    const category = $('actionCategory')?.value;
+    if (!idea) return;
+    const now = Date.now();
+    actionBet = new ActionBet({ idea, category, opensAt: now, locksAt: now + 60_000 }, now);
+    actionBackingStake = 50;
+    simulatedBacker = 0;
+    toast('', `<b>Action proposed:</b> ${escapeHtml(idea)} · ${escapeHtml(category)}`, simNow);
+    startActionTimers();
+    renderActionBet();
+    return;
+  }
+  if (event.target.id === 'actionModifyForm' && actionBet) {
+    const idea = $('actionModifyIdea')?.value.trim();
+    if (!idea) return;
+    actionBalance += actionBet.backers.get('demo-viewer') ?? 0;
+    actionBet.modify(idea, { now: Date.now() });
+    actionModifying = false;
+    simulatedBacker = 0;
+    toast('trending', `<b>Streamer proposed a revision:</b> ${escapeHtml(idea)} · backing reopened`, simNow);
+    startActionTimers();
+    renderActionBet();
+  }
+});
+$('actionBetPopup').addEventListener('input', (event) => {
+  if (event.target.id !== 'actionBackStake') return;
+  actionBackingStake = Math.max(1, Math.round(Number(event.target.value) || 1));
+});
 $('burstBtn').onclick = () => injectBurst();
 $('spamBtn').onclick = () => injectSpammer();
 $('dareBtn').onclick = () => {
