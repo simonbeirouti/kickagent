@@ -66,6 +66,31 @@ describe("internal suggestion generation route", () => {
     }));
   });
 
+  it("feeds the HYPE STATE block to the model when the request carries hype context", async () => {
+    const response = await POST(request({
+      ...validBody,
+      hype: {
+        flaggedSpammers: ["spamlord99"],
+        lastHighlight: { agoSeconds: 180, headline: "Chat erupted over poker — peak 84", peak: 84 },
+        ready: true,
+        score: 22,
+        topTopics: [{ mentions: 7, topic: "poker", trend: "rising" }],
+        trend: "falling",
+        trendingGap: "slots",
+      },
+    }, true));
+
+    expect(response.status).toBe(200);
+    const call = generateText.mock.calls[0]?.[0] as { prompt: string; system: string };
+    expect(call.prompt).toContain("HYPE STATE:");
+    expect(call.prompt).toContain("hype score 22/100, trend falling");
+    expect(call.prompt).toContain('trending gap: "slots"');
+    expect(call.prompt).toContain('"Chat erupted over poker — peak 84" (3m ago)');
+    expect(call.prompt).toContain("spam shield: flagged spamlord99");
+    expect(call.system).toContain("When hype is low or falling, pivot");
+    expect(call.system).toContain("When hype is high or rising, ride the moment");
+  });
+
   it("maps invalid model output and provider errors to a safe 502", async () => {
     generateText.mockResolvedValueOnce({ output: { statement: "x".repeat(141) } });
     const invalidOutput = await POST(request(validBody, true));

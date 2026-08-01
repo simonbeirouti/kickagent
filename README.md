@@ -59,5 +59,13 @@ npm test
 npm run build
 ```
 
+Validate the hype→Claude suggestion path without a Kick connection (replays synthetic chat through
+the real hype bridge; makes one live claude-haiku call when `ANTHROPIC_API_KEY` is set in the
+environment or `.env.local`, then prints the hype context and the resulting suggestion):
+
+```bash
+node scripts/validate-hype-suggestions.mjs
+```
+
 Drag the predefined widgets around the 24 × 14 snap grid, then add `/public/overlay` as a 1920 ×
 1080 browser source. Public, phone, and glasses layouts are saved independently in PostgreSQL.

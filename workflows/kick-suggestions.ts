@@ -2,11 +2,12 @@ import { sleep } from "workflow";
 import { cleanupExpiredData as deleteExpiredData } from "@/lib/cleanup";
 import { appUrl } from "@/lib/env";
 import { query } from "@/lib/db";
-import { computeHypeSnapshot, type HypeChatRow } from "@/lib/hype";
+import { computeHypeContext, type HypeChatRow } from "@/lib/hype";
 import { findConnectionById } from "@/lib/kick/repository";
 import { signInternalJwt } from "@/lib/security";
 import {
   suggestionGenerationResponseSchema,
+  toRequestHype,
   type PromptChatMessage,
   type SuggestionGenerationRequest,
 } from "@/lib/suggestions";
@@ -195,15 +196,12 @@ async function analyzeWindow(
       [connectionId, new Date(windowEndMs - HYPE_LOOKBACK_MS).toISOString(), windowEnd],
     ),
   ]);
-  const hype = computeHypeSnapshot(hypeLookbackRows, windowEndMs);
+  // Full engine read — score/trend, topic momentum, trending gap, spam flags,
+  // and the last highlight — feeds the agent as the prompt's HYPE STATE block.
+  const hype = computeHypeContext(hypeLookbackRows, windowEndMs);
   const suggestionRequest: SuggestionGenerationRequest = {
     categoryName: connection.category_name ?? undefined,
-    hype: {
-      ready: hype.ready,
-      score: hype.score,
-      topTopics: hype.topTopics.map((topic) => ({ ...topic })),
-      trend: hype.trend,
-    },
+    hype: toRequestHype(hype),
     messages: cachedRows.reverse().map(toPromptMessage),
     recentSuggestions: recentSuggestionRows.map((row) => row.suggestion),
     streamTitle: connection.stream_title ?? undefined,
@@ -224,8 +222,12 @@ async function analyzeWindow(
     basis,
     connectionId,
     durationMs: Date.now() - startedAt,
+    hypeFlaggedSpammers: hype.flaggedSpammers.length,
+    hypeHighlight: hype.lastHighlight?.headline ?? null,
     hypeReady: hype.ready,
     hypeScore: hype.score,
+    hypeTrend: hype.trend,
+    hypeTrendingGap: hype.trendingGap,
     messageIds: cachedRows.map((row) => row.message_id),
     reason,
     windowEnd,
