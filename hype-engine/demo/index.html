@@ -29,6 +29,10 @@
   }
   button:hover { border-color: var(--green); }
   button.primary { background: var(--green); color: #08210a; font-weight: 700; border-color: var(--green); }
+  #predictionDialog { position: fixed; inset: auto 12px 12px auto; width: min(360px, calc(100vw - 24px)); height: 250px; max-height: calc(100vh - 82px); margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; transition:height .18s ease; }
+  .dialog-close { position: absolute; z-index: 2; top: 8px; right: 8px; width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 1.1rem; line-height: 1; background: #0d1015; box-shadow: 0 4px 18px rgb(0 0 0 / 55%); }
+  .prediction-frame { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+  @media (max-width: 400px) { #predictionDialog { inset: auto 8px 8px auto; width: calc(100vw - 16px); max-height:calc(100vh - 70px); } }
 
   main { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 1rem; padding: 1rem; min-height: 0; }
   .col { display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
@@ -94,6 +98,7 @@
   <h1>KICK-ASS<span>(ISTANT)</span> · HYPE ENGINE</h1>
   <span class="clock" id="clock">0:00</span>
   <div class="spacer"></div>
+  <button id="predictionBtn">Predictions</button>
   <button id="playBtn" class="primary">Pause</button>
   <button id="speedBtn">Speed 1×</button>
   <button id="restartBtn">Restart</button>
@@ -139,6 +144,11 @@
     </div>
   </div>
 </main>
+
+<dialog id="predictionDialog" aria-label="Predictions and bets">
+  <button class="dialog-close" id="predictionCloseBtn" aria-label="Close predictions">×</button>
+  <iframe class="prediction-frame" id="predictionFrame" src="about:blank" title="Predictions and bets"></iframe>
+</dialog>
 
 <script type="module">
 import { HypeEngine } from '../src/engine.js';
@@ -303,6 +313,27 @@ function spliceEvents(add) {
 $('playBtn').onclick = () => { playing = !playing; $('playBtn').textContent = playing ? 'Pause' : 'Play'; };
 $('speedBtn').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; $('speedBtn').textContent = `Speed ${speed}×`; };
 $('restartBtn').onclick = () => boot();
+const closePrediction = () => {
+  $('predictionDialog').close();
+  $('predictionFrame').src = 'about:blank';
+};
+$('predictionBtn').onclick = () => {
+  if ($('predictionDialog').open) {
+    closePrediction();
+    return;
+  }
+  // Loading the frame constructs a fresh Prediction instance for this round.
+  $('predictionFrame').src = `/demo/predictions.html?embed=1&round=${Date.now()}`;
+  $('predictionDialog').show();
+};
+$('predictionCloseBtn').onclick = () => closePrediction();
+window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin || event.source !== $('predictionFrame').contentWindow) return;
+  if (event.data?.type === 'prediction-size') {
+    const available = window.innerHeight - 82;
+    $('predictionDialog').style.height = `${Math.min(available,Math.max(150,event.data.height))}px`;
+  }
+});
 $('burstBtn').onclick = () => injectBurst();
 $('spamBtn').onclick = () => injectSpammer();
 $('dareBtn').onclick = () => {
