@@ -39,6 +39,10 @@ export interface OverlayState {
     readonly yesPercent: number;
     readonly yesPool: number;
   } | null;
+  readonly privateContext?: {
+    readonly headline: string;
+    readonly notes: readonly string[];
+  };
   readonly screenLayouts: ScreenLayouts;
   readonly suggestion: {
     readonly basis: "chat" | "stream_context" | null;
@@ -109,6 +113,13 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       question: "Will you hit 13,000 trophies this stream?",
       yesPercent: 62,
       yesPool: 824,
+    },
+    privateContext: {
+      headline: "Keep the product name private until the reveal",
+      notes: [
+        "Demo the glasses before the phone view",
+        "Thank Mika for the raid when there is a natural pause",
+      ],
     },
     screenLayouts: { public: DEFAULT_OVERLAY_LAYOUT },
     suggestion: {

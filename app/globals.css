@@ -977,6 +977,18 @@ body:has(.glasses-surface) {
   font-weight: 600;
 }
 
+.glasses-prediction-bet {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.7rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  color: #ffca86;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
 .glasses-cue-card {
   bottom: clamp(4rem, 10vh, 7rem);
   left: clamp(1.25rem, 6vw, 6rem);

@@ -41,20 +41,30 @@ export function GlassesSurface() {
         <p>{formatTopics(state.summary?.topics)}</p>
       </section>
 
-      {state.prediction ? (
+      {state.prediction || state.activeBet ? (
         <section aria-label="Live prediction market" className="glasses-prediction-card">
           <div className="glasses-card-label"><TrendingUpIcon size={14} /> Live prediction</div>
-          <strong>{state.prediction.question}</strong>
-          <div className="glasses-prediction-split">
-            <div className="glasses-prediction-yes">
-              <span>YES {state.prediction.yesPercent}%</span>
-              <small>{formatMoney(state.prediction.yesPool)}</small>
+          {state.prediction ? (
+            <>
+              <strong>{state.prediction.question}</strong>
+              <div className="glasses-prediction-split">
+                <div className="glasses-prediction-yes">
+                  <span>YES {state.prediction.yesPercent}%</span>
+                  <small>{formatMoney(state.prediction.yesPool)}</small>
+                </div>
+                <div className="glasses-prediction-no">
+                  <span>NO {100 - state.prediction.yesPercent}%</span>
+                  <small>{formatMoney(state.prediction.noPool)}</small>
+                </div>
+              </div>
+            </>
+          ) : null}
+          {state.activeBet ? (
+            <div className="glasses-prediction-bet">
+              <FlameIcon size={13} /> {state.activeBet.text} · {formatMoney(state.activeBet.amount)} ·{" "}
+              {state.activeBet.status}
             </div>
-            <div className="glasses-prediction-no">
-              <span>NO {100 - state.prediction.yesPercent}%</span>
-              <small>{formatMoney(state.prediction.noPool)}</small>
-            </div>
-          </div>
+          ) : null}
         </section>
       ) : null}
 
