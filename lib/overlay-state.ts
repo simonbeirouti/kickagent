@@ -43,6 +43,24 @@ export interface OverlayState {
     readonly stale: boolean;
     readonly text: string;
   } | null;
+  readonly surfaceContent?: {
+    readonly glassesCues: readonly string[];
+    readonly phoneTopics: readonly {
+      readonly label: string;
+      readonly percentage: number;
+    }[];
+    readonly viewerCount: string;
+    readonly widgetLabels: {
+      readonly glassesPrivate: string;
+      readonly glassesSuggestion: string;
+      readonly phonePulse: string;
+      readonly phoneSuggestion: string;
+      readonly phoneTopics: string;
+      readonly publicChat: string;
+      readonly publicHype: string;
+      readonly publicSuggestion: string;
+    };
+  };
   readonly updatedAt: string;
 }
 
@@ -108,6 +126,28 @@ export function createDemoOverlayState(now = new Date()): OverlayState {
       generatedAt: secondsAgo(7),
       stale: false,
       text: "Ask chat what information they would want in their glasses during a live stream.",
+    },
+    surfaceContent: {
+      glassesCues: [
+        "Ask chat what information they would want in their glasses during a live stream.",
+        "Mika's message is getting traction — ask whether the glasses should feel invisible or expressive.",
+        "Pause after the reveal and let chat react before moving to the phone view.",
+      ],
+      phoneTopics: [
+        { label: "Glasses privacy", percentage: 38 },
+        { label: "Phone controls", percentage: 24 },
+      ],
+      viewerCount: "1.8K",
+      widgetLabels: {
+        glassesPrivate: "Private information",
+        glassesSuggestion: "Agent suggestion",
+        phonePulse: "Stream pulse",
+        phoneSuggestion: "Say this next",
+        phoneTopics: "Chat is leaning into",
+        publicChat: "Latest chat",
+        publicHype: "Hype score",
+        publicSuggestion: "Next talking point",
+      },
     },
     updatedAt: now.toISOString(),
   };

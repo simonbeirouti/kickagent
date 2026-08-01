@@ -74,6 +74,11 @@ describe("public overlay state", () => {
       live: true,
       privateContext: { notes: expect.any(Array) },
       suggestion: { basis: "chat" },
+      surfaceContent: {
+        glassesCues: expect.any(Array),
+        phoneTopics: expect.any(Array),
+        viewerCount: "1.8K",
+      },
     });
     expect(findOwnerConnection).not.toHaveBeenCalled();
     expect(query).not.toHaveBeenCalled();

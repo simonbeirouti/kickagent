@@ -33,8 +33,9 @@ Copy `.env.example` to `.env.local` and set:
 - `APP_URL`: canonical deployment origin, without a trailing slash.
 - `DATABASE_URL`: PostgreSQL connection string. Enable SSL when required by your database host.
 - `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET`: credentials from the Kick developer app.
-- `KICK_STATELESS_MODE`: profile/layout preview mode only. When enabled, it deliberately disables
-  database persistence, Kick event subscriptions, live-chat ingestion, and suggestion workflows.
+- `KICK_STATELESS_MODE`: profile/layout preview mode only. Keep this `false` for the demo; enabling
+  it deliberately disables database persistence, Kick event subscriptions, live-chat ingestion,
+  and suggestion workflows.
 - `TOKEN_ENCRYPTION_KEY`: at least 32 random characters; encrypts Kick access and refresh tokens.
 - `EVE_INTERNAL_AUTH_SECRET`: at least 32 random characters; signs workflow-to-eve JWTs.
 - `ANTHROPIC_API_KEY`: Anthropic API key used by both eve agents for direct model calls.
