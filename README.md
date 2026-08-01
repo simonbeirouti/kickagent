@@ -4,15 +4,15 @@ A multi-surface streamer companion built with Next.js, eve, PostgreSQL, and Verc
 ingests signed Kick chat webhooks and creates one short talking-point cue every 30 seconds while a
 channel is live.
 
-The current unauthenticated demo surfaces are:
+The live companion surfaces are:
 
-- `/`: overlay studio and public-canvas editor
-- `/glasses`: private, glanceable agent suggestions and sensitive context
-- `/streamer`: phone-sized live brief, chat signals, and private notes
+- `/`: authenticated overlay layout studio
+- `/glasses`: private, glanceable agent summary and suggestion
+- `/streamer`: phone-sized agent brief and live chat signals
 - `/public/overlay`: the audience-facing 1920 × 1080 browser source
 
-Demo layout changes are stored in the browser's local storage, so the public overlay can be tested
-without a Kick connection or database setup.
+All content comes from the connected Kick channel and the eve agent's rolling analysis. Only widget
+placement is editable; chat, summaries, suggestions, topics, and energy are live, read-only data.
 
 ## Kick developer setup
 
@@ -33,7 +33,7 @@ Copy `.env.example` to `.env.local` and set:
 - `APP_URL`: canonical deployment origin, without a trailing slash.
 - `DATABASE_URL`: PostgreSQL connection string. Enable SSL when required by your database host.
 - `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET`: credentials from the Kick developer app.
-- `KICK_STATELESS_MODE`: profile/layout preview mode only. Keep this `false` for the demo; enabling
+- `KICK_STATELESS_MODE`: profile/layout preview mode only. Keep this `false` for live use; enabling
   it deliberately disables database persistence, Kick event subscriptions, live-chat ingestion,
   and suggestion workflows.
 - `TOKEN_ENCRYPTION_KEY`: at least 32 random characters; encrypts Kick access and refresh tokens.

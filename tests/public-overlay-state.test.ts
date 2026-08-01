@@ -31,6 +31,16 @@ describe("public overlay state", () => {
       stream_title: "Live now",
       updated_at: new Date().toISOString(),
     });
+    const analysis = {
+      basis: "chat",
+      generated_at: new Date().toISOString(),
+      hype_score: 78,
+      status: "complete",
+      suggestion: "Ask chat which setup change made the biggest difference.",
+      summary: "Chat is comparing the setup upgrades that improved their streams.",
+      topics: [{ label: "Setup upgrades", percentage: 80 }],
+      window_start: new Date().toISOString(),
+    };
     query
       .mockResolvedValueOnce([
         {
@@ -40,8 +50,8 @@ describe("public overlay state", () => {
           sender_username: "viewer",
         },
       ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([analysis])
+      .mockResolvedValueOnce([analysis]);
   });
 
   afterEach(() => {
@@ -57,30 +67,14 @@ describe("public overlay state", () => {
     await expect(response.json()).resolves.toMatchObject({
       authenticated: true,
       channel: { slug: "bsimon" },
+      hypeScore: 78,
       messages: [{ content: "Public message", username: "viewer" }],
-    });
-    expect(findOwnerConnection).toHaveBeenCalledOnce();
-  });
-
-  it("serves demo state without a cookie or database connection", async () => {
-    const response = await GET(
-      new Request("http://localhost/api/overlay/state?demo=1"),
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      authenticated: true,
-      channel: { slug: "bsimon" },
-      live: true,
-      privateContext: { notes: expect.any(Array) },
       suggestion: { basis: "chat" },
-      surfaceContent: {
-        glassesCues: expect.any(Array),
-        phoneTopics: expect.any(Array),
-        viewerCount: "1.8K",
+      summary: {
+        text: "Chat is comparing the setup upgrades that improved their streams.",
+        topics: [{ label: "Setup upgrades", percentage: 80 }],
       },
     });
-    expect(findOwnerConnection).not.toHaveBeenCalled();
-    expect(query).not.toHaveBeenCalled();
+    expect(findOwnerConnection).toHaveBeenCalledOnce();
   });
 });

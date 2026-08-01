@@ -99,9 +99,19 @@ export const kickLivestreamMetadataEventSchema = z.object({
   }),
 });
 
-export const suggestionSchema = z.object({
+export const streamAnalysisSchema = z.object({
   basis: z.enum(["chat", "stream_context"]),
+  hypeScore: z.number().int().min(0).max(100),
+  summary: z.string().trim().min(1).max(280),
   suggestion: z.string().trim().min(1).max(140),
+  topics: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(48),
+        percentage: z.number().int().min(0).max(100),
+      }),
+    )
+    .max(3),
 });
 
-export type Suggestion = z.infer<typeof suggestionSchema>;
+export type StreamAnalysis = z.infer<typeof streamAnalysisSchema>;

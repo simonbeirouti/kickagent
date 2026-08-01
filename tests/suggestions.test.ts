@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { suggestionSchema } from "@/lib/kick/types";
+import { streamAnalysisSchema } from "@/lib/kick/types";
 import { buildSuggestionPrompt } from "@/lib/suggestions";
 
 describe("suggestion generation contract", () => {
@@ -29,11 +29,15 @@ describe("suggestion generation contract", () => {
   });
 
   it("rejects overlong or invalid structured output", () => {
-    expect(suggestionSchema.parse({ basis: "chat", suggestion: "Ask chat about their weekend." })).toEqual({
+    const analysis = {
       basis: "chat",
+      hypeScore: 70,
+      summary: "Chat is discussing weekend plans.",
       suggestion: "Ask chat about their weekend.",
-    });
-    expect(() => suggestionSchema.parse({ basis: "chat", suggestion: "x".repeat(141) })).toThrow();
-    expect(() => suggestionSchema.parse({ basis: "unknown", suggestion: "Hello" })).toThrow();
+      topics: [{ label: "Weekend plans", percentage: 65 }],
+    } as const;
+    expect(streamAnalysisSchema.parse(analysis)).toEqual(analysis);
+    expect(() => streamAnalysisSchema.parse({ ...analysis, suggestion: "x".repeat(141) })).toThrow();
+    expect(() => streamAnalysisSchema.parse({ ...analysis, basis: "unknown" })).toThrow();
   });
 });

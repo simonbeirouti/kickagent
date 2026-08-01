@@ -84,11 +84,23 @@ CREATE TABLE IF NOT EXISTS analysis_windows (
   status text NOT NULL CHECK (status IN ('processing', 'complete', 'failed')),
   suggestion text,
   basis text CHECK (basis IN ('chat', 'stream_context')),
+  summary text,
+  topics jsonb NOT NULL DEFAULT '[]'::jsonb,
+  hype_score integer CHECK (hype_score BETWEEN 0 AND 100),
   error text,
   generated_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (connection_id, window_start)
 );
+
+-- statement-breakpoint
+ALTER TABLE analysis_windows ADD COLUMN IF NOT EXISTS summary text;
+
+-- statement-breakpoint
+ALTER TABLE analysis_windows ADD COLUMN IF NOT EXISTS topics jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- statement-breakpoint
+ALTER TABLE analysis_windows ADD COLUMN IF NOT EXISTS hype_score integer;
 
 -- statement-breakpoint
 CREATE INDEX IF NOT EXISTS analysis_windows_latest_idx
