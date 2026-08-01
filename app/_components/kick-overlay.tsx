@@ -34,7 +34,9 @@ interface OverlayState {
     readonly streamTitle: string | null;
   };
   readonly connected: boolean;
+  readonly hypeReady: boolean;
   readonly hypeScore: number;
+  readonly hypeTrend: "falling" | "rising" | "steady";
   readonly ingestionEnabled: boolean;
   readonly layout: OverlayLayout;
   readonly live: boolean;
@@ -395,7 +397,7 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
   return (
     <div className="canvas-widget-inner hype-canvas-widget">
       <WidgetHeader icon={<ActivityIcon size={17} />} label="Hype score">
-        <span className="preview-badge">Preview</span>
+        <span className="preview-badge">{state.hypeReady ? "Live" : "Calibrating"}</span>
       </WidgetHeader>
       <div className="hype-content">
         <div
@@ -405,7 +407,7 @@ function WidgetContent({ kind, state }: { readonly kind: WidgetKind; readonly st
         >
           <strong>{state.hypeScore}</strong><span>/ 100</span>
         </div>
-        <div className="hype-copy"><ZapIcon size={18} /><span>Good energy</span></div>
+        <div className="hype-copy"><ZapIcon size={18} /><span>{hypeLabel(state)}</span></div>
       </div>
     </div>
   );
@@ -468,6 +470,13 @@ function placementStyle(placement: WidgetPlacement): CSSProperties {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function hypeLabel(state: OverlayState): string {
+  if (!state.hypeReady) return "Learning this chat's baseline…";
+  if (state.hypeTrend === "rising") return "Heating up";
+  if (state.hypeTrend === "falling") return "Cooling off";
+  return "Holding steady";
 }
 
 function suggestionText(state: OverlayState): string {

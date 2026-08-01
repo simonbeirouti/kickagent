@@ -134,7 +134,7 @@
       <span class="sep"></span>
       <span id="hype">▲ 0 HYPE</span>
       <span class="sep"></span>
-      <span>AI AGENT ONLINE</span>
+      <span id="agentStatus">AI AGENT ONLINE</span>
       <div class="battery"><div class="battery-fill" id="battery"></div></div>
     </div>
   </div>
@@ -190,6 +190,9 @@
      ?seed=abc         deterministic run (same sequence every reload)
      ?rows=3           how many rows in TOP PREDICTIONS (2–4)
      ?chrome=0         hide the keyboard-hint line
+     ?source=live      REAL data: hype-engine over a kick-hype-starter SSE
+                       feed drives hype/toasts/dares (see module script at
+                       the bottom; serve via `node hype-engine/serve.js`)
 
    Layout: press L to drag any panel to a new spot; positions persist
    in localStorage (per browser/profile) so OBS just reloads into your
@@ -203,6 +206,10 @@
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const SPEED = clamp(parseFloat(P.get('speed')) || 1, 0.1, 10);
   const ROWS  = clamp(parseInt(P.get('rows'), 10) || 2, 2, 4);
+  // Live mode: the hype-engine module script (bottom of this file) drives
+  // hype, toasts, the featured prediction and the dare card from REAL events;
+  // the simulator keeps only what has no real source yet (market pools, battery).
+  const LIVE = P.get('source') === 'live';
   if (P.has('transparent') || P.get('bg') === 'transparent') {
     document.documentElement.classList.add('transparent');
   }
@@ -306,9 +313,11 @@
   const markets = [];
   const recent = [];
 
-  function newMarket() {
-    let def, guard = 0;
-    do { def = pick(MARKETS); } while (recent.includes(def.q) && ++guard < 25);
+  function newMarket(def) {
+    if (!def) {
+      let guard = 0;
+      do { def = pick(MARKETS); } while (recent.includes(def.q) && ++guard < 25);
+    }
     recent.push(def.q);
     if (recent.length > Math.min(6, MARKETS.length - 2)) recent.shift();
 
@@ -362,7 +371,8 @@
     $('predQuestion').textContent = m.q;
     flash($('predictionCard'), 'pop');
     flash($('predictionCard'), 'glow');
-    state.nextMarketAt = now() + rnd(14, 30) * 1000 / SPEED;
+    // Live mode: featured cards come from real engine suggestions, not a timer.
+    state.nextMarketAt = LIVE ? Infinity : now() + rnd(14, 30) * 1000 / SPEED;
   }
 
   function renderFeatured() {
@@ -523,25 +533,27 @@
     }
     while (markets.length < ROWS + 2) markets.push(newMarket());
 
-    // featured rotation
-    if (t > state.nextMarketAt) {
+    // featured rotation (live: replaced by engine 'suggestion' events)
+    if (!LIVE && t > state.nextMarketAt) {
       const m = newMarket();
       markets.push(m);
       feature(m);
     }
 
-    // bet lifecycle
-    if (t > state.betPhaseAt) advanceBet();
+    // bet lifecycle (live: replaced by assistant.trackAction → 'impact' verdicts)
+    if (!LIVE && t > state.betPhaseAt) advanceBet();
 
-    // toasts
-    if (t > state.nextToastAt) showToast();
+    // toasts (live: replaced by real engine/stream events)
+    if (!LIVE && t > state.nextToastAt) showToast();
     if (t > state.hideToastAt) { toastEl.classList.remove('show'); state.hideToastAt = Infinity; }
 
-    // ambient counters
-    const drift = rnd(-6, 8) * dt * SPEED * 10;
-    state.viewers = clamp(state.viewers + drift, 400, 99000);
-    state.hypeDelta = rnd(-1, 1.25);
-    state.hype = clamp(state.hype + state.hypeDelta * dt * SPEED * 6, 3, 99);
+    // ambient counters (live: hype = engine.sample, viewers = unique chatters)
+    if (!LIVE) {
+      const drift = rnd(-6, 8) * dt * SPEED * 10;
+      state.viewers = clamp(state.viewers + drift, 400, 99000);
+      state.hypeDelta = rnd(-1, 1.25);
+      state.hype = clamp(state.hype + state.hypeDelta * dt * SPEED * 6, 3, 99);
+    }
     state.battery = clamp(state.battery - 0.012 * dt * SPEED, 4, 100);
 
     renderFeatured();
@@ -622,6 +634,7 @@
     if (k === 'l') setEditMode(!editMode);
     if (k === 'r' && editMode) { localStorage.removeItem(LAYOUT_KEY); location.reload(); }
     if (editMode) return;
+    if (LIVE) return; // simulator injection keys are off while real data drives
     if (k === 'n') { const m = newMarket(); markets.push(m); feature(m); }
     if (k === 'b') newBet();
     if (k === 't') showToast();
@@ -630,12 +643,254 @@
 
   /* ---------- boot ---------- */
   feature(markets[0]);
-  newBet();
-  state.nextToastAt = now() + 2500 / SPEED;
+  if (LIVE) {
+    // Real data drives from here: cold counters, no simulated bet/toast
+    // schedule. The dare card opens when the engine baseline locks.
+    state.hype = 0; state.hypeDelta = 0; state.viewers = 0;
+    state.nextToastAt = Infinity;
+    state.betPhaseAt = Infinity;
+    $('betIcon').textContent = '🧠';
+    $('betText').textContent = 'Hit Me, Kick Me — opens when the chat baseline locks';
+    $('betAmount').textContent = '—';
+    setBetStatus('STATUS: CALIBRATING', '');
+  } else {
+    newBet();
+    state.nextToastAt = now() + 2500 / SPEED;
+  }
   renderRows();
   renderTopbar();
   requestAnimationFrame(tick);
+
+  /* ---------- live-mode bridge ----------
+     The hype-engine module script (below) is the only caller. It owns the
+     real signal (engine/assistant/highlights); this bridge owns the DOM. */
+  window.__hud = {
+    live: LIVE,
+    setHype(hype, delta) { state.hype = hype; state.hypeDelta = delta; },
+    setViewers(n) { state.viewers = n; },
+    setAgentStatus(text) { $('agentStatus').textContent = text; },
+    toast(t) { showToast(t); },
+    /** Feature a real prediction card built from an engine suggestion. */
+    featureMarket(def) {
+      const m = newMarket(def);
+      markets.push(m);
+      feature(m);
+    },
+    /** Open a dare (Hit Me, Kick Me). Returns the dare label to track. */
+    startDare() {
+      const def = pick(BETS);
+      state.bet = {
+        icon: def.icon, text: def.t,
+        amount: (chance(0.2) ? rint(10, 30) : rint(2, 15)) * 10,
+        phase: 0, won: null, born: now()
+      };
+      $('betIcon').textContent = def.icon;
+      $('betText').textContent = def.t;
+      $('betAmount').textContent = money(state.bet.amount);
+      $('betCard').classList.remove('won', 'lost');
+      setBetStatus('STATUS: PENDING', '');
+      flash($('betCard'), 'pop');
+      flash($('betAmount'), 'bump');
+      return def.t;
+    },
+    lockDare() { setBetStatus('STATUS: LOCKED IN — MEASURING HYPE', 'locked'); },
+    /** Resolve the dare from a real 'impact' verdict: up | flat | down. */
+    resolveDare(verdict, delta) {
+      const b = state.bet;
+      if (!b) return;
+      if (verdict === 'up') {
+        const payout = Math.round(b.amount * (1.4 + Math.min(1.7, Math.abs(delta) / 12)));
+        setBetStatus(`STATUS: WON  +${money(payout)}`, 'won');
+        $('betCard').classList.add('won');
+        flash($('betAmount'), 'bump');
+        flash($('betCard'), 'glow');
+      } else if (verdict === 'down') {
+        setBetStatus('STATUS: LOST', 'lost');
+        $('betCard').classList.add('lost');
+        flash($('betAmount'), 'bump');
+      } else {
+        setBetStatus('STATUS: PUSH — HYPE FLAT', 'locked');
+      }
+    },
+  };
 })();
+</script>
+<script type="module">
+/* ============================================================
+   Live mode (?source=live) — REAL data via hype-engine.
+
+   Feeds a kick-hype-starter SSE stream through the repo's hype-engine
+   (HypeEngine + TopicTracker + KickAssistant + HighlightTracker) and drives
+   the HUD through the window.__hud bridge:
+
+     topbar hype       ← engine.sample() {hype, trend}
+     topbar viewers    ← unique chatters, last 10 min (the real audience
+                         signal this feed carries; no viewer-count event yet)
+     featured card     ← assistant 'suggestion' events (pivot / trending gap)
+     dare card         ← assistant.trackAction → 'impact' up/flat/down
+                         (up = WON, down = LOST, flat = PUSH)
+     toasts            ← 'ready', suggestions, impacts, highlight closes,
+                         kicks gifts, new subs, spam-shield flags
+
+   Serve with `node hype-engine/serve.js` →
+     http://localhost:8420/glasses/hype-glasses-hud.html?source=live
+   Imports are absolute in that server's URL space (/src/* → hype-engine/src/*).
+   ?sse=<url> overrides the feed, ?channel=<broadcaster_user_id> filters it.
+   Without ?source=live this script does nothing (simulator stays standalone).
+   ============================================================ */
+const P = new URLSearchParams(location.search);
+if (P.get('source') === 'live') {
+  const [{ HypeEngine }, { TopicTracker }, { KickAssistant }, { TrendingTopics }, { HighlightTracker }] =
+    await Promise.all([
+      import('/src/engine.js'), import('/src/topics.js'), import('/src/assistant.js'),
+      import('/src/trending.js'), import('/src/highlights.js'),
+    ]);
+  const hud = window.__hud;
+
+  const DEFAULT_SSE = 'https://kick-hype-starter-production.up.railway.app/api/events/stream';
+  // The deployment sends no CORS headers; when served by hype-engine/serve.js
+  // (port 8420) default to its same-origin /sse-proxy, same as the demo.
+  const SSE_URL = P.get('sse') || (location.port === '8420' ? '/sse-proxy' : DEFAULT_SSE);
+  const CHANNEL = P.get('channel') ? Number(P.get('channel')) : null;
+
+  const engine = new HypeEngine();
+  const topics = new TopicTracker();
+  const assistant = new KickAssistant(engine, topics, { trending: new TrendingTopics() });
+  const highlights = new HighlightTracker({ topics });
+
+  const t0 = Date.now();
+  const nowMs = () => Date.now() - t0; // one local clock for ingest + sampling
+  const chatters = new Map();          // userId -> last-seen ts
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmtClock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+
+  // Same mapping as hype-engine/demo/index.html and test/live-replay.js:
+  // kick-hype-starter SSE messages ({id, type, receivedAt, payload}) → engine events.
+  function mapKickEvent(msg) {
+    const p = msg.payload || {};
+    const kind = String(msg.type || '').replace(/^fake:/, '');
+    const base = { id: msg.id, broadcaster: p.broadcaster?.user_id ?? null };
+    switch (kind) {
+      case 'chat.message.sent': {
+        const s = p.sender || {};
+        return { ...base, id: p.message_id || msg.id, type: 'chat',
+          userId: String(s.user_id ?? 'anonymous'), username: s.username || 'Anonymous',
+          badges: (s.identity?.badges || []).map((b) => b.type), text: p.content || '' };
+      }
+      case 'kicks.gifted': {
+        const g = p.gifter || {};
+        return { ...base, type: 'kicks', userId: String(g.user_id ?? 'anonymous'),
+          username: g.username || 'Anonymous', badges: [], raw: p.gift?.amount || 1 };
+      }
+      case 'channel.subscription.new':
+      case 'channel.subscription.renewal': {
+        const s = p.subscriber || {};
+        return { ...base, type: 'sub', userId: String(s.user_id ?? 'anonymous'),
+          username: s.username || 'Anonymous', badges: [], raw: 1 };
+      }
+      case 'channel.subscription.gifts': {
+        const g = p.gifter || {};
+        const n = Array.isArray(p.giftees) ? p.giftees.length : 1;
+        return { ...base, type: 'sub', userId: String(g.user_id ?? 'anonymous'),
+          username: g.username || 'Anonymous', badges: [], raw: Math.max(1, n) };
+      }
+      case 'channel.followed': {
+        const f = p.follower || {};
+        return { ...base, type: 'follow', userId: String(f.user_id ?? 'anonymous'),
+          username: f.username || 'Anonymous', badges: [] };
+      }
+      default:
+        return null;
+    }
+  }
+
+  // ---- dare loop: Hit Me, Kick Me over real hype impact ----
+  let dareOpen = false;
+  function startDareRound() {
+    if (dareOpen) return;
+    dareOpen = true;
+    const label = hud.startDare();
+    // A beat for viewers to see the dare, then lock it in and let the
+    // assistant measure the next ~15s of hype against the pre-dare baseline.
+    setTimeout(() => {
+      hud.lockDare();
+      assistant.trackAction(label, nowMs());
+    }, 8000);
+  }
+
+  assistant.on('ready', () => {
+    hud.toast({ kind: '', icon: '🧠', title: 'BASELINE LOCKED',
+      copy: 'Chat baseline calibrated — <b>Hit Me, Kick Me</b> is open.' });
+    startDareRound();
+  });
+  assistant.on('impact', (p) => {
+    dareOpen = false;
+    hud.resolveDare(p.verdict, p.delta);
+    const label = { up: 'HYPE UP', flat: 'FLAT', down: 'HYPE DOWN' }[p.verdict];
+    hud.toast({
+      kind: p.verdict === 'up' ? '' : p.verdict === 'down' ? 'bad' : 'warn',
+      icon: p.verdict === 'up' ? '📈' : p.verdict === 'down' ? '📉' : '⏸️',
+      title: `DARE RESULT — ${label}`,
+      copy: `“${esc(p.label)}” moved hype <b>${p.preHype}→${p.postHype}</b> (Δ${p.delta >= 0 ? '+' : ''}${p.delta}).`,
+    });
+    setTimeout(startDareRound, 7000);
+  });
+  assistant.on('suggestion', (p) => {
+    if (p.topic) {
+      hud.featureMarket(p.kind === 'trending'
+        ? { icon: '📈', q: `Will "${p.topic}" take over chat?`, short: `${p.topic} takes over?` }
+        : { icon: '🎯', q: `Will chat pivot to "${p.topic}"?`, short: `Pivot to ${p.topic}?` });
+    }
+    hud.toast(p.kind === 'trending'
+      ? { kind: 'warn', icon: '👀', title: 'TRENDING GAP', copy: esc(p.text) }
+      : { kind: '', icon: '🧠', title: 'AGENT CALL', copy: esc(p.text) });
+  });
+  highlights.on('highlight', (h) => {
+    hud.toast({ kind: '', icon: '🎬', title: 'CLIP CAPTURED',
+      copy: `${esc(h.headline)} <b>(${fmtClock(h.startTs)}–${fmtClock(h.endTs)})</b>` });
+  });
+
+  // ---- SSE ingest ----
+  let lastFlagToasted = null;
+  hud.setAgentStatus('AGENT CONNECTING…');
+  const es = new EventSource(SSE_URL);
+  es.onopen = () => hud.setAgentStatus('AI AGENT ONLINE');
+  es.onerror = () => hud.setAgentStatus('AGENT RECONNECTING…');
+  es.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    const ev = mapKickEvent(msg);
+    if (!ev) return;
+    if (CHANNEL != null && ev.broadcaster !== CHANNEL) return;
+    ev.ts = nowMs();
+    const w = engine.ingest(ev);
+    const flagged = engine.isFlagged(ev.userId);
+    if (!flagged) topics.ingest(ev, w);
+    highlights.onEvent(ev, w);
+    chatters.set(ev.userId, ev.ts);
+    if (flagged && ev.userId !== lastFlagToasted) {
+      lastFlagToasted = ev.userId;
+      hud.toast({ kind: 'bad', icon: '🛡️', title: 'SPAM SHIELD',
+        copy: `Flagged <b>${esc(ev.username)}</b> — excluded from hype &amp; topics.` });
+    }
+    if (ev.type === 'kicks') hud.toast({ kind: '', icon: '💰', title: 'KICKS GIFTED',
+      copy: `<b>${esc(ev.username)}</b> gifted <b>${ev.raw} Kicks</b>.` });
+    if (ev.type === 'sub') hud.toast({ kind: '', icon: '🔔', title: 'NEW SUB',
+      copy: `<b>${esc(ev.username)}</b> just subscribed.` });
+  };
+
+  // ---- sample loop (same 250ms cadence as the demo) ----
+  setInterval(() => {
+    const t = nowMs();
+    const st = engine.sample(t);
+    assistant.onSample(st, t);
+    highlights.onSample(st, t);
+    hud.setHype(st.hype, st.trend === 'rising' ? 1 : st.trend === 'falling' ? -1 : 0);
+    for (const [id, ts] of chatters) if (t - ts > 600_000) chatters.delete(id);
+    hud.setViewers(chatters.size);
+  }, 250);
+}
 </script>
 </body>
 </html>
