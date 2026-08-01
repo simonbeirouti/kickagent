@@ -23,8 +23,8 @@ import {
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
-import { useState } from "react";
-import type { CSSProperties, DragEvent } from "react";
+import { useRef, useState } from "react";
+import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
   AlertsWidget,
   BattleWidget,
@@ -38,6 +38,8 @@ import {
 } from "@/app/_components/overlay-widgets";
 import { useLiveOverlayState } from "@/lib/live-overlay-store";
 import {
+  MIN_WIDGET_HEIGHT,
+  MIN_WIDGET_WIDTH,
   OVERLAY_COLUMNS,
   OVERLAY_ROWS,
   WIDGET_DEFAULTS,
@@ -275,6 +277,29 @@ function OverlayCanvas({
   readonly screen?: ManagedScreen;
   readonly state: OverlayState;
 }) {
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [resizingId, setResizingId] = useState<string | null>(null);
+
+  const onResizeMove = (event: ReactPointerEvent<HTMLButtonElement>, placement: WidgetPlacement) => {
+    const canvas = canvasRef.current;
+    if (resizingId !== placement.id || !canvas || !onLayoutChange) return;
+    const bounds = canvas.getBoundingClientRect();
+    const width = clamp(
+      Math.round(((event.clientX - bounds.left) / bounds.width) * OVERLAY_COLUMNS) - placement.x,
+      MIN_WIDGET_WIDTH,
+      OVERLAY_COLUMNS - placement.x,
+    );
+    const height = clamp(
+      Math.round(((event.clientY - bounds.top) / bounds.height) * OVERLAY_ROWS) - placement.y,
+      MIN_WIDGET_HEIGHT,
+      OVERLAY_ROWS - placement.y,
+    );
+    if (width === placement.width && height === placement.height) return;
+    onLayoutChange(
+      layout.map((item) => (item.id === placement.id ? { ...item, height, width } : item)),
+    );
+  };
+
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     if (!onLayoutChange) return;
     event.preventDefault();
@@ -303,11 +328,12 @@ function OverlayCanvas({
       className={publicMode ? "overlay-canvas public" : `overlay-canvas editor screen-${screen}`}
       onDragOver={onLayoutChange ? (event) => event.preventDefault() : undefined}
       onDrop={onLayoutChange ? onDrop : undefined}
+      ref={canvasRef}
     >
       {layout.map((placement) => (
         <article
           className={`canvas-widget ${publicMode ? "" : "editable"}`}
-          draggable={!publicMode}
+          draggable={!publicMode && resizingId !== placement.id}
           key={placement.id}
           onDragStart={
             publicMode ? undefined : (event) => startPlacedDrag(event, placement)
@@ -323,6 +349,25 @@ function OverlayCanvas({
             >
               <Trash2Icon size={13} />
             </button>
+          ) : null}
+          {!publicMode ? (
+            <button
+              aria-label={`Resize ${WIDGET_LABELS[placement.kind]}`}
+              className="resize-widget"
+              onPointerCancel={() => setResizingId(null)}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setResizingId(placement.id);
+              }}
+              onPointerMove={(event) => onResizeMove(event, placement)}
+              onPointerUp={(event) => {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+                setResizingId(null);
+              }}
+              type="button"
+            />
           ) : null}
           <WidgetContent
             kind={placement.kind}

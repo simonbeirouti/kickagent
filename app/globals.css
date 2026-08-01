@@ -2936,3 +2936,34 @@ textarea {
   font-size: clamp(0.36rem, 2.4cqw, 0.72rem);
   font-weight: 640;
 }
+
+/* Widget resize handle */
+
+.resize-widget {
+  position: absolute;
+  z-index: 2;
+  right: 0.35rem;
+  bottom: 0.35rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  border: 0;
+  border-right: 2px solid #919993;
+  border-bottom: 2px solid #919993;
+  border-bottom-right-radius: 0.5rem;
+  background: transparent;
+  cursor: nwse-resize;
+  opacity: 0;
+  touch-action: none;
+  transition: 120ms ease;
+}
+
+.canvas-widget:hover .resize-widget,
+.resize-widget:focus-visible {
+  opacity: 1;
+}
+
+.resize-widget:hover,
+.resize-widget:active {
+  border-color: #53fc18;
+}

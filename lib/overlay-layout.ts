@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const OVERLAY_COLUMNS = 24;
 export const OVERLAY_ROWS = 14;
+export const MIN_WIDGET_WIDTH = 3;
+export const MIN_WIDGET_HEIGHT = 2;
 
 export const widgetKindSchema = z.enum([
   "suggestion",
@@ -25,10 +27,10 @@ export const MAX_WIDGETS = widgetKindSchema.options.length;
 
 export const widgetPlacementSchema = z
   .object({
-    height: z.number().int().min(2).max(OVERLAY_ROWS),
+    height: z.number().int().min(MIN_WIDGET_HEIGHT).max(OVERLAY_ROWS),
     id: z.string().min(1).max(64),
     kind: widgetKindSchema,
-    width: z.number().int().min(3).max(OVERLAY_COLUMNS),
+    width: z.number().int().min(MIN_WIDGET_WIDTH).max(OVERLAY_COLUMNS),
     x: z.number().int().min(0).max(OVERLAY_COLUMNS - 1),
     y: z.number().int().min(0).max(OVERLAY_ROWS - 1),
   })
