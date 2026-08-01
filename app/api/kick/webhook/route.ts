@@ -48,7 +48,6 @@ export async function POST(request: Request): Promise<Response> {
         const event = kickChatEventSchema.parse(body);
         console.info("[kick:chat] ingested", {
           connectionId: outcome.connectionId,
-          content: event.content.slice(0, 500),
           inserted: outcome.inserted,
           messageCount: outcome.messageCount,
           messageId: event.message_id,

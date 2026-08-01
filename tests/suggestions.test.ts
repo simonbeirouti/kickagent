@@ -1,43 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { streamAnalysisSchema } from "@/lib/kick/types";
-import { buildSuggestionPrompt } from "@/lib/suggestions";
+import {
+  buildSuggestionPrompt,
+  suggestionGenerationRequestSchema,
+  suggestionGenerationResponseSchema,
+} from "@/lib/suggestions";
 
 describe("suggestion generation contract", () => {
   it("grounds populated windows and includes anti-repeat context", () => {
     const prompt = buildSuggestionPrompt({
       categoryName: "Just Chatting",
-      recentChat: [{ content: "What got you into streaming?", createdAt: "now", username: "sam" }],
+      messages: [{ content: "Favourite setup upgrade?", createdAt: "now", username: "lee" }],
       recentSuggestions: ["Tell chat about your first stream."],
       streamTitle: "Late night catch-up",
-      windowChat: [{ content: "Favourite setup upgrade?", createdAt: "now", username: "lee" }],
     });
     expect(prompt).toContain("Favourite setup upgrade?");
     expect(prompt).toContain("Tell chat about your first stream.");
     expect(prompt).toContain("Just Chatting");
+    expect(prompt).toContain("<untrusted_chat_records");
+    expect(prompt).toContain("</untrusted_chat_records>");
   });
 
   it("still provides explicit stream grounding for empty windows", () => {
     const prompt = buildSuggestionPrompt({
       categoryName: "Minecraft",
-      recentChat: [],
+      messages: [],
       recentSuggestions: [],
       streamTitle: "Hardcore day 12",
-      windowChat: [],
     });
     expect(prompt).toContain("Hardcore day 12");
     expect(prompt).toContain("(none)");
   });
 
-  it("rejects overlong or invalid structured output", () => {
-    const analysis = {
-      basis: "chat",
-      hypeScore: 70,
-      summary: "Chat is discussing weekend plans.",
-      suggestion: "Ask chat about their weekend.",
-      topics: [{ label: "Weekend plans", percentage: 65 }],
-    } as const;
-    expect(streamAnalysisSchema.parse(analysis)).toEqual(analysis);
-    expect(() => streamAnalysisSchema.parse({ ...analysis, suggestion: "x".repeat(141) })).toThrow();
-    expect(() => streamAnalysisSchema.parse({ ...analysis, basis: "unknown" })).toThrow();
+  it("enforces the request and response bounds", () => {
+    const message = { content: "hello", createdAt: "now", username: "viewer" };
+    expect(() => suggestionGenerationRequestSchema.parse({
+      messages: Array.from({ length: 6 }, () => message),
+      recentSuggestions: [],
+    })).toThrow();
+    expect(suggestionGenerationResponseSchema.parse({ statement: "Ask chat about their weekend." }))
+      .toEqual({ statement: "Ask chat about their weekend." });
+    expect(() => suggestionGenerationResponseSchema.parse({ statement: "x".repeat(141) })).toThrow();
+    expect(() => suggestionGenerationResponseSchema.parse({ statement: "" })).toThrow();
   });
 });

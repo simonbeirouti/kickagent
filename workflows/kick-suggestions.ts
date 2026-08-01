@@ -1,12 +1,14 @@
-import { Client } from "eve/client";
 import { sleep } from "workflow";
 import { cleanupExpiredData as deleteExpiredData } from "@/lib/cleanup";
 import { appUrl } from "@/lib/env";
 import { query } from "@/lib/db";
 import { findConnectionById } from "@/lib/kick/repository";
-import { streamAnalysisSchema, type StreamAnalysis } from "@/lib/kick/types";
 import { signInternalJwt } from "@/lib/security";
-import { buildSuggestionPrompt, type PromptChatMessage } from "@/lib/suggestions";
+import {
+  suggestionGenerationResponseSchema,
+  type PromptChatMessage,
+  type SuggestionGenerationRequest,
+} from "@/lib/suggestions";
 
 interface WindowPlan {
   readonly dueAt: string;
@@ -24,8 +26,6 @@ interface ChatRow extends Record<string, unknown> {
   readonly content: string;
   readonly created_at: string;
   readonly message_id: string;
-  readonly sender_profile_picture: string | null;
-  readonly sender_user_id: string | null;
   readonly sender_username: string;
 }
 
@@ -36,31 +36,6 @@ interface SuggestionRow extends Record<string, unknown> {
 interface ExistingWindowRow extends Record<string, unknown> {
   readonly status: string;
 }
-
-const outputSchema = {
-  additionalProperties: false,
-  properties: {
-    basis: { enum: ["chat", "stream_context"], type: "string" },
-    hypeScore: { maximum: 100, minimum: 0, type: "integer" },
-    summary: { maxLength: 280, minLength: 1, type: "string" },
-    suggestion: { maxLength: 140, minLength: 1, type: "string" },
-    topics: {
-      items: {
-        additionalProperties: false,
-        properties: {
-          label: { maxLength: 48, minLength: 1, type: "string" },
-          percentage: { maximum: 100, minimum: 0, type: "integer" },
-        },
-        required: ["label", "percentage"],
-        type: "object",
-      },
-      maxItems: 3,
-      type: "array",
-    },
-  },
-  required: ["suggestion", "summary", "topics", "hypeScore", "basis"],
-  type: "object",
-} as const;
 
 export async function kickSuggestionWorkflow(
   connectionId: string,
@@ -193,9 +168,7 @@ async function analyzeWindow(
 
   const [cachedRows, recentSuggestionRows] = await Promise.all([
     query<ChatRow>(
-      `SELECT
-         message_id, sender_user_id::text, sender_username, sender_profile_picture,
-         content, created_at
+      `SELECT message_id, sender_username, content, created_at
        FROM chat_messages
        WHERE connection_id = $1
        ORDER BY created_at DESC, ingested_at DESC LIMIT 5`,
@@ -208,13 +181,12 @@ async function analyzeWindow(
       [connectionId],
     ),
   ]);
-  const prompt = buildSuggestionPrompt({
+  const suggestionRequest: SuggestionGenerationRequest = {
     categoryName: connection.category_name ?? undefined,
-    recentChat: [],
+    messages: cachedRows.reverse().map(toPromptMessage),
     recentSuggestions: recentSuggestionRows.map((row) => row.suggestion),
     streamTitle: connection.stream_title ?? undefined,
-    windowChat: cachedRows.reverse().map(toPromptMessage),
-  });
+  };
   console.info("[suggestion:analysis] requesting", {
     connectionId,
     messageCount: cachedRows.length,
@@ -223,65 +195,45 @@ async function analyzeWindow(
     windowEnd,
     windowStart,
   });
-  const suggestion = await requestSuggestion(connectionId, prompt);
+  const startedAt = Date.now();
+  const statement = await requestSuggestion(connectionId, suggestionRequest);
+  const basis = suggestionRequest.messages.length > 0 ? "chat" : "stream_context";
+  console.info("[suggestion:analysis] completed", {
+    basis,
+    connectionId,
+    durationMs: Date.now() - startedAt,
+    messageIds: cachedRows.map((row) => row.message_id),
+    reason,
+    windowEnd,
+    windowStart,
+  });
   await query(
     `UPDATE analysis_windows SET
-      status = 'complete', suggestion = $4, basis = $5, summary = $6,
-      topics = $7::jsonb, hype_score = $8, error = NULL,
+      status = 'complete', suggestion = $4, basis = $5, summary = NULL,
+      topics = '[]'::jsonb, hype_score = NULL, error = NULL,
       generated_at = now(), updated_at = now()
      WHERE connection_id = $1 AND window_start = $2 AND window_end = $3`,
-    [
-      connectionId,
-      windowStart,
-      windowEnd,
-      suggestion.suggestion,
-      suggestion.basis,
-      suggestion.summary,
-      JSON.stringify(suggestion.topics),
-      suggestion.hypeScore,
-    ],
+    [connectionId, windowStart, windowEnd, statement, basis],
   );
 }
 
 async function requestSuggestion(
   connectionId: string,
-  prompt: string,
-): Promise<StreamAnalysis> {
-  const client = new Client({
-    auth: { bearer: signInternalJwt(connectionId) },
-    host: `${appUrl()}/eve/agents/suggester`,
+  input: SuggestionGenerationRequest,
+): Promise<string> {
+  const response = await fetch(`${appUrl()}/api/internal/suggestions/generate`, {
+    body: JSON.stringify(input),
+    headers: {
+      authorization: `Bearer ${signInternalJwt(connectionId)}`,
+      "content-type": "application/json",
+    },
+    method: "POST",
     redirect: "error",
   });
-  const response = await client.session().send<StreamAnalysis>({ message: prompt, outputSchema });
-  const startedAt = Date.now();
-  let result: unknown;
-  console.info("[eve:suggester] started", { connectionId, sessionId: response.sessionId });
-  try {
-    for await (const event of response) {
-      console.info("[eve:suggester] event", {
-        at: event.meta.at,
-        eventId: event.meta.id,
-        sessionId: response.sessionId,
-        type: event.type,
-      });
-      if (event.type === "result.completed") result = event.data.result;
-    }
-    const parsed = streamAnalysisSchema.parse(result);
-    console.info("[eve:suggester] completed", {
-      basis: parsed.basis,
-      durationMs: Date.now() - startedAt,
-      sessionId: response.sessionId,
-      suggestion: parsed.suggestion,
-    });
-    return parsed;
-  } catch (error) {
-    console.error("[eve:suggester] failed", {
-      durationMs: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error),
-      sessionId: response.sessionId,
-    });
-    throw error;
+  if (!response.ok) {
+    throw new Error(`Suggestion endpoint returned HTTP ${response.status}.`);
   }
+  return suggestionGenerationResponseSchema.parse(await response.json()).statement;
 }
 
 async function markWindowFailed(
@@ -310,9 +262,6 @@ function toPromptMessage(row: ChatRow): PromptChatMessage {
   return {
     content: row.content,
     createdAt: row.created_at,
-    messageId: row.message_id,
-    profilePicture: row.sender_profile_picture ?? undefined,
-    senderUserId: row.sender_user_id ?? undefined,
     username: row.sender_username,
   };
 }

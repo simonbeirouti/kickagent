@@ -7,6 +7,5 @@ const nextConfig: NextConfig = {};
 export default withEve(withWorkflow(nextConfig), {
   agents: {
     main: ".",
-    suggester: "./agents/suggester",
   },
 });

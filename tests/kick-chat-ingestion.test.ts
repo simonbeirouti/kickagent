@@ -53,6 +53,24 @@ describe("Kick chat ingestion", () => {
     });
   });
 
+  it("does not increment cadence for a duplicate webhook", async () => {
+    query.mockResolvedValueOnce([
+      {
+        connection_id: null,
+        connection_matched: true,
+        message_inserted: false,
+        suggestion_message_count: null,
+      },
+    ]);
+
+    await expect(ingestChat("event-1", "chat.message.sent", chatEvent)).resolves.toEqual({
+      inserted: false,
+      messageCount: 0,
+      shouldGenerateSuggestion: false,
+    });
+    expect(query).toHaveBeenCalledOnce();
+  });
+
   it("surfaces a webhook that cannot be matched to an active connection", async () => {
     query.mockResolvedValueOnce([
       { connection_id: null, connection_matched: false, message_inserted: false },
